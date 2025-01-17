@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 secrecy = "0.10.3"
-zeroize = "1.8.1"
+zeroize = { version = "1.8.1", features = ["derive"] }
