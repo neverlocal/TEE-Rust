@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+secrecy = "0.10.3"
+zeroize = "1.8.1"
