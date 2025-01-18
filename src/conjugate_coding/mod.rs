@@ -86,6 +86,14 @@ pub struct ConjugateCodingContext {
     secret: SecretBox<Vec<u8>>,
 }
 
+
+///
+/// @brief   Prints the current protocol context to screen.
+///
+/// @param ctx:       Pointer to the context struct;
+/// @param format:    Bitstring format: b binary (default), x hex, d decimal. 
+///
+///
 fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
     println!("===============");
     println!("PROTOCOL CONTEXT");
@@ -159,4 +167,33 @@ fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
             println!("value:    {:?}",
                     &ctx.secret.expose_secret());
         println!("++++++++++++++++");
+}
+
+
+///
+/// @brief   Sets the size in bytes for secret_size and security_size in the protocol context.
+///          Proceed by reserving all the needed memory in the protocol context.
+///
+///          Should be called by the party preparing the qubits.
+///
+/// @param ctx:            Pointer to the context struct;
+/// @param secret_size:    How many bytes we want to the secret bitstring to be. Suggested default is 32;
+/// @param security_size:  How many bytes we want to use as security bits. Suggested default is 32.
+///
+///
+fn conjugate_coding_init (secret_size: usize, security_size: usize) -> ConjugateCodingContext {
+    let ctx: ConjugateCodingContext =  ConjugateCodingContext {
+        secret_size:     secret_size,
+        security_size:   security_size,
+        total_size:      secret_size + security_size,
+        orderings:       SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        bitmask:         SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        security0:       SecretBox::new(Box::new(Vec::with_capacity(security_size))),
+        security1:       SecretBox::new(Box::new(Vec::with_capacity(security_size))),
+        meas_outcomes:   SecretBox::new(Box::new(Vec::with_capacity(2*(secret_size + security_size)))),
+        meas_choices:    SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        purged_outcomes: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        secret:          SecretBox::new(Box::new(Vec::with_capacity(secret_size))),
+    };
+    return ctx;
 }
