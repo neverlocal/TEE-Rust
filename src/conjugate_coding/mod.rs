@@ -217,7 +217,7 @@ fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
         }
     }
     assert_eq!(zeroes, 8*secret_size, 
-        "Bitmask is not balanced. There are {} zeroes instead of {}.", zeroes, 8*secret_size);
+        "Vector is not balanced. There are {} zeroes instead of {}.", zeroes, 8*secret_size);
     assert_eq!(ones, 8*security_size, 
-        "Bitmask is not balanced. There are {} zeroes instead of {}.", ones, 8*security_size);
+        "Vector is not balanced. There are {} zeroes instead of {}.", ones, 8*security_size);
 }
