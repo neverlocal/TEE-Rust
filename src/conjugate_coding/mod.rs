@@ -197,3 +197,27 @@ fn conjugate_coding_init (secret_size: usize, security_size: usize) -> Conjugate
     };
     return ctx;
 }
+
+// Helper function. Checks if the n-th bit of a byte is 1.
+fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
+    let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
+    return byte & mask[bit] != 0;
+}
+
+fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
+    let mut zeroes: usize = 0;
+    let mut ones: usize = 0;
+    for i in 0..vec.len() {
+        for j in 0..8  {
+            if is_nth_bit_set(vec[i], j){
+                ones += 1;
+            } else {
+                zeroes += 1;
+            }
+        }
+    }
+    assert_eq!(zeroes, 8*secret_size, 
+        "Bitmask is not balanced. There are {} zeroes instead of {}.", zeroes, 8*secret_size);
+    assert_eq!(ones, 8*security_size, 
+        "Bitmask is not balanced. There are {} zeroes instead of {}.", ones, 8*security_size);
+}
