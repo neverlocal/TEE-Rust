@@ -205,11 +205,10 @@ fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
 }
 
 fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
-    let mut zeroes: usize = 0;
-    let mut ones: usize = 0;
-    for i in 0..vec.len() {
+    let (mut zeroes, mut ones): (usize, usize) = (0,0);
+    for byte in vec.iter() {
         for j in 0..8  {
-            if is_nth_bit_set(vec[i], j){
+            if is_nth_bit_set(*byte, j){
                 ones += 1;
             } else {
                 zeroes += 1;
