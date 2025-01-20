@@ -1,11 +1,11 @@
-//! 
+//!
 //! CONJUGATE CODING LIBRARY
 //!
 //! This mini library allows to implement conjugate-coding based
 //! one-time programs. It contains all the needed
 //! tooling to recover a bitstring from a conjugate-coding
 //! measurement.
-//! 
+//!
 //! This library should be paired with asymmetric key crypto
 //! and run on a TEE to make sure the protocol developed
 //! is cryptographically secure.
@@ -13,10 +13,10 @@
 //! Example protocol run:
 //!
 //! SENDING PARTY CALLS:
-//! conjugate_coding_init: sets 
+//! conjugate_coding_init: sets
 //!      -- The secret string lenght;
 //!      -- The amount of supplementary security bits to use.
-//! conjugate_coding_setup: sets 
+//! conjugate_coding_setup: sets
 //!      -- The orderings (which qubits encode which bits);
 //!      -- The bit mask (which bits are security string);
 //!      -- The values that the measurement should have at
@@ -44,24 +44,24 @@
 //!
 
 /// Ensure memory protection over cryptographically sensitive data.
-use secrecy::{SecretBox, ExposeSecret};
+use secrecy::{ExposeSecret, SecretBox};
 /// Ensure that cryptographically sensitive data is zeroed into oblivion after use.
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ConjugateCodingContext {
-///
-/// The whole protocol status is stored in a struct.
-/// Different actors provide different portions of this struct.
-///
-/// secret_size, security_size, orderings, bitmsecurity, security1
-/// are set by the party preparing the qubits.
-///
-/// meas_outcomes, meas_choices
-/// are set by the party measuring the qubits.
-///
-/// total_size, purged_outcomes, secret
-/// are computed at different stages of the protocol.
+    ///
+    /// The whole protocol status is stored in a struct.
+    /// Different actors provide different portions of this struct.
+    ///
+    /// secret_size, security_size, orderings, bitmsecurity, security1
+    /// are set by the party preparing the qubits.
+    ///
+    /// meas_outcomes, meas_choices
+    /// are set by the party measuring the qubits.
+    ///
+    /// total_size, purged_outcomes, secret
+    /// are computed at different stages of the protocol.
     /// Size in bytes of the final secret.  Normally 32.
     secret_size: usize,
     /// Size in bytes of the security bits. Normally 32.
@@ -86,12 +86,11 @@ pub struct ConjugateCodingContext {
     secret: SecretBox<Vec<u8>>,
 }
 
-
 ///
 /// @brief   Prints the current protocol context to screen.
 ///
 /// @param ctx:       Pointer to the context struct;
-/// @param format:    Bitstring format: b binary (default), x hex, d decimal. 
+/// @param format:    Bitstring format: b binary (default), x hex, d decimal.
 ///
 ///
 fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
@@ -99,76 +98,83 @@ fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
     println!("PROTOCOL CONTEXT");
     println!("++++++++++++++++");
     println!("Provided by preparing party");
-        println!("----------------");
-            println!("secret_size:    {}", ctx.secret_size);
-            println!("security_size:    {}", ctx.security_size);
-        println!("----------------");
-        println!("orderings");
-            println!("size:    {}/{}",
-                    &ctx.orderings.expose_secret().len(),
-                    &ctx.orderings.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.orderings.expose_secret());
-        println!("----------------");
-        println!("bitmask");
-            println!("size:    {}/{}",
-                &ctx.bitmask.expose_secret().len(),
-                &ctx.bitmask.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.bitmask.expose_secret());
-        println!("----------------");
-        println!("security parameters 0");
-            println!("size:    {}/{}",
-                &ctx.security0.expose_secret().len(),
-                &ctx.security0.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.security0.expose_secret());
-        println!("----------------");
-        println!("security parameters 1");
-            println!("size:    {}/{}",
-                &ctx.security1.expose_secret().len(),
-                &ctx.security1.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.security1.expose_secret());
+    println!("----------------");
+    println!("secret_size:    {}", ctx.secret_size);
+    println!("security_size:    {}", ctx.security_size);
+    println!("----------------");
+    println!("orderings");
+    println!(
+        "size:    {}/{}",
+        &ctx.orderings.expose_secret().len(),
+        &ctx.orderings.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.orderings.expose_secret());
+    println!("----------------");
+    println!("bitmask");
+    println!(
+        "size:    {}/{}",
+        &ctx.bitmask.expose_secret().len(),
+        &ctx.bitmask.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.bitmask.expose_secret());
+    println!("----------------");
+    println!("security parameters 0");
+    println!(
+        "size:    {}/{}",
+        &ctx.security0.expose_secret().len(),
+        &ctx.security0.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.security0.expose_secret());
+    println!("----------------");
+    println!("security parameters 1");
+    println!(
+        "size:    {}/{}",
+        &ctx.security1.expose_secret().len(),
+        &ctx.security1.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.security1.expose_secret());
     println!("++++++++++++++++");
     println!("++++++++++++++++");
     println!("Provided by preparing party");
-        println!("----------------");
-        println!("measurement outcomes");
-            println!("size:    {}/{}",
-                &ctx.meas_outcomes.expose_secret().len(),
-                &ctx.meas_outcomes.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.meas_outcomes.expose_secret());
-        println!("----------------");
-        println!("choices of bases");
-            println!("size:    {}/{}",
-                &ctx.meas_choices.expose_secret().len(),
-                &ctx.meas_choices.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.meas_choices.expose_secret());
+    println!("----------------");
+    println!("measurement outcomes");
+    println!(
+        "size:    {}/{}",
+        &ctx.meas_outcomes.expose_secret().len(),
+        &ctx.meas_outcomes.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.meas_outcomes.expose_secret());
+    println!("----------------");
+    println!("choices of bases");
+    println!(
+        "size:    {}/{}",
+        &ctx.meas_choices.expose_secret().len(),
+        &ctx.meas_choices.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.meas_choices.expose_secret());
     println!("++++++++++++++++");
     println!("++++++++++++++++");
     println!("Computed");
-        println!("----------------");
-        println!("total_size:    {}", ctx.total_size);
-        println!("----------------");
-        println!("Purged outcomes");
-            println!("size:    {}/{}",
-                &ctx.purged_outcomes.expose_secret().len(),
-                &ctx.purged_outcomes.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.purged_outcomes.expose_secret());
-        println!("----------------");
-        println!("Secret");
-            println!("size:    {}/{}",
-                &ctx.secret.expose_secret().len(),
-                &ctx.secret.expose_secret().capacity());
-            println!("value:    {:?}",
-                    &ctx.secret.expose_secret());
-        println!("++++++++++++++++");
+    println!("----------------");
+    println!("total_size:    {}", ctx.total_size);
+    println!("----------------");
+    println!("Purged outcomes");
+    println!(
+        "size:    {}/{}",
+        &ctx.purged_outcomes.expose_secret().len(),
+        &ctx.purged_outcomes.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.purged_outcomes.expose_secret());
+    println!("----------------");
+    println!("Secret");
+    println!(
+        "size:    {}/{}",
+        &ctx.secret.expose_secret().len(),
+        &ctx.secret.expose_secret().capacity()
+    );
+    println!("value:    {:?}", &ctx.secret.expose_secret());
+    println!("++++++++++++++++");
 }
-
 
 ///
 /// @brief   Sets the size in bytes for secret_size and security_size in the protocol context.
@@ -181,42 +187,56 @@ fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
 /// @param security_size:  How many bytes we want to use as security bits. Suggested default is 32.
 ///
 ///
-fn conjugate_coding_init (secret_size: usize, security_size: usize) -> ConjugateCodingContext {
-    let ctx: ConjugateCodingContext =  ConjugateCodingContext {
-        secret_size:     secret_size,
-        security_size:   security_size,
-        total_size:      secret_size + security_size,
-        orderings:       SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        bitmask:         SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        security0:       SecretBox::new(Box::new(Vec::with_capacity(security_size))),
-        security1:       SecretBox::new(Box::new(Vec::with_capacity(security_size))),
-        meas_outcomes:   SecretBox::new(Box::new(Vec::with_capacity(2*(secret_size + security_size)))),
-        meas_choices:    SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+fn conjugate_coding_init(secret_size: usize, security_size: usize) -> ConjugateCodingContext {
+    let ctx: ConjugateCodingContext = ConjugateCodingContext {
+        secret_size,
+        security_size,
+        total_size: secret_size + security_size,
+        orderings: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        bitmask: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
+        security0: SecretBox::new(Box::new(Vec::with_capacity(security_size))),
+        security1: SecretBox::new(Box::new(Vec::with_capacity(security_size))),
+        meas_outcomes: SecretBox::new(Box::new(Vec::with_capacity(
+            2 * (secret_size + security_size),
+        ))),
+        meas_choices: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
         purged_outcomes: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        secret:          SecretBox::new(Box::new(Vec::with_capacity(secret_size))),
+        secret: SecretBox::new(Box::new(Vec::with_capacity(secret_size))),
     };
-    return ctx;
+
+    ctx
 }
 
 // Helper function. Checks if the n-th bit of a byte is 1.
 fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
     let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
-    return byte & mask[bit] != 0;
+
+    byte & mask[bit] != 0
 }
 
 fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
-    let (mut zeroes, mut ones): (usize, usize) = (0,0);
+    let (mut zeroes, mut ones): (usize, usize) = (0, 0);
     for byte in vec.iter() {
-        for j in 0..8  {
-            if is_nth_bit_set(*byte, j){
+        for j in 0..8 {
+            if is_nth_bit_set(*byte, j) {
                 ones += 1;
             } else {
                 zeroes += 1;
             }
         }
     }
-    assert_eq!(zeroes, 8*secret_size, 
-        "Vector is not balanced. There are {} zeroes instead of {}.", zeroes, 8*secret_size);
-    assert_eq!(ones, 8*security_size, 
-        "Vector is not balanced. There are {} zeroes instead of {}.", ones, 8*security_size);
+    assert_eq!(
+        zeroes,
+        8 * secret_size,
+        "Vector is not balanced. There are {} zeroes instead of {}.",
+        zeroes,
+        8 * secret_size
+    );
+    assert_eq!(
+        ones,
+        8 * security_size,
+        "Vector is not balanced. There are {} zeroes instead of {}.",
+        ones,
+        8 * security_size
+    );
 }
