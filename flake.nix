@@ -17,8 +17,8 @@
       in
       {
         devShells.default = with pkgs; mkShell {
+          nativeBuildInputs = [ pkgs.udev ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.pkg-config ];
           buildInputs = [
-            systemd
             openssl
             rust-bin.stable.latest.default
             (rust-bin.stable.latest.default.override {
