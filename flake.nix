@@ -17,10 +17,8 @@
       in
       {
         devShells.default = with pkgs; mkShell {
-          nativeBuildInputs = [ pkgs.udev ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.pkg-config ];
           buildInputs = [
             openssl
-            rust-bin.stable.latest.default
             (rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" ];
               targets = [ "riscv32imc-unknown-none-elf" "riscv32imac-unknown-none-elf" ];
