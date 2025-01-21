@@ -2,6 +2,7 @@
 #![no_main]
 
 use esp_backtrace as _;
+use extern esp_hal;
 use esp_hal::{
     delay::Delay,
     gpio::{Level, Output},
