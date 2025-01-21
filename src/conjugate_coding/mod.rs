@@ -44,8 +44,8 @@
 //!
 
 extern crate alloc;
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::writeln;
 use esp_alloc as _;
 use esp_println::println;
@@ -58,7 +58,7 @@ use secrecy::{ExposeSecret, SecretBox};
 //use zeroize_derive::{Zeroize, ZeroizeOnDrop};
 
 //#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct ConjugateCodingContext {
+pub struct ConjugateCodingPrepare {
     ///
     /// The whole protocol status is stored in a struct.
     /// Different actors provide different portions of this struct.
@@ -81,140 +81,183 @@ pub struct ConjugateCodingContext {
     orderings: SecretBox<Vec<u8>>,
     /// The bit mask array, which says which bits of purged_outcomes are used for security. Length equals total_size. Must contain precisely security_size 1s and secret_size 0s.
     bitmask: SecretBox<Vec<u8>>,
-    /// The measurement outcomes array. Length equals to 2*total_size.
-    meas_outcomes: SecretBox<Vec<u8>>,
-    /// The choices of bases for each couple of measurements. Length equals total_size.
-    meas_choices: SecretBox<Vec<u8>>,
-    /// The measurement_outcomes array purged from measurement noise. Length equals measurement_outcomes/2.
-    purged_outcomes: SecretBox<Vec<u8>>,
     /// The array used for checking security in the 0 measurement case. Length equals security_size.
     security0: SecretBox<Vec<u8>>,
     /// The array used for checking security in the 1 measurement case. Length equals security_size.
     security1: SecretBox<Vec<u8>>,
+}
+
+enum ConjugateCodingContextError {
+    OrderingsWL,
+    Security0WL,
+    Security1WL,
+    BitmaskWL,
+    BitmaskUnbalanced,
+}
+
+impl ConjugateCodingPrepare {
+    ///
+    /// @brief   Sets the size in bytes for secret_size and security_size in the protocol context.
+    ///          Proceed by reserving all the needed memory in the protocol context.
+    ///
+    ///          Should be called by the party preparing the qubits.
+    ///
+    /// @param ctx:            Pointer to the context struct;
+    /// @param secret_size:    How many bytes we want to the secret bitstring to be. Suggested default is 32;
+    /// @param security_size:  How many bytes we want to use as security bits. Suggested default is 32.
+    ///
+    ///
+    fn new(
+        secret_size: usize,
+        security_size: usize,
+        orderings: SecretBox<Vec<u8>>,
+        bitmask: SecretBox<Vec<u8>>,
+        security0: SecretBox<Vec<u8>>,
+        security1: SecretBox<Vec<u8>>,
+    ) -> Result<ConjugateCodingPrepare, Vec<ConjugateCodingContextError>> {
+        let total_size = secret_size + security_size;
+        let mut error_vec: Vec<ConjugateCodingContextError> = Vec::new();
+
+        if orderings.expose_secret().len() != total_size {
+            error_vec.push(ConjugateCodingContextError::OrderingsWL);
+        }
+        if bitmask.expose_secret().len() != total_size {
+            error_vec.push(ConjugateCodingContextError::BitmaskWL);
+        }
+        if security0.expose_secret().len() != security_size {
+            error_vec.push(ConjugateCodingContextError::Security0WL);
+        }
+        if security1.expose_secret().len() != security_size {
+            error_vec.push(ConjugateCodingContextError::Security1WL);
+        }
+        if !vector_is_balanced(&bitmask, secret_size, security_size) {
+            error_vec.push(ConjugateCodingContextError::BitmaskUnbalanced);
+        }
+        if error_vec.len() > 0 {
+            return Err(error_vec);
+        }
+
+        Ok(ConjugateCodingPrepare {
+            secret_size,
+            security_size,
+            total_size,
+            orderings,
+            bitmask,
+            security0,
+            security1,
+        })
+    }
+
+    ///
+    /// @brief   Prints the current protocol context to screen.
+    ///
+    /// @param ctx:       Pointer to the context struct;
+    /// @param format:    Bitstring format: b binary (default), x hex, d decimal.
+    ///
+    ///
+    pub fn print(&self) {
+        println!("===============");
+        println!("PROTOCOL CONTEXT");
+        println!("++++++++++++++++");
+        println!("Provided by preparing party");
+        println!("----------------");
+        println!("secret_size:    {}", self.secret_size);
+        println!("security_size:    {}", self.security_size);
+        println!("----------------");
+        println!("orderings");
+        println!(
+            "size:    {}/{}",
+            self.orderings.expose_secret().len(),
+            self.orderings.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.orderings.expose_secret());
+        println!("----------------");
+        println!("bitmask");
+        println!(
+            "size:    {}/{}",
+            self.bitmask.expose_secret().len(),
+            self.bitmask.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.bitmask.expose_secret());
+        println!("----------------");
+        println!("security parameters 0");
+        println!(
+            "size:    {}/{}",
+            self.security0.expose_secret().len(),
+            self.security0.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.security0.expose_secret());
+        println!("----------------");
+        println!("security parameters 1");
+        println!(
+            "size:    {}/{}",
+            self.security1.expose_secret().len(),
+            self.security1.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.security1.expose_secret());
+        println!("++++++++++++++++");
+        println!("++++++++++++++++");
+        println!("Provided by preparing party");
+        println!("----------------");
+        /*
+        println!("measurement outcomes");
+        println!(
+            "size:    {}/{}",
+            self.meas_outcomes.expose_secret().len(),
+            self.meas_outcomes.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.meas_outcomes.expose_secret());
+        println!("----------------");
+        println!("choices of bases");
+        println!(
+            "size:    {}/{}",
+            self.meas_choices.expose_secret().len(),
+            self.meas_choices.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.meas_choices.expose_secret());
+        println!("++++++++++++++++");
+        println!("++++++++++++++++");
+        println!("Computed");
+        println!("----------------");
+        println!("total_size:    {}", self.total_size);
+        println!("----------------");
+        println!("Purged outcomes");
+        println!(
+            "size:    {}/{}",
+            self.purged_outcomes.expose_secret().len(),
+            self.purged_outcomes.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.purged_outcomes.expose_secret());
+        println!("----------------");
+        println!("Secret");
+        println!(
+            "size:    {}/{}",
+            self.secret.expose_secret().len(),
+            self.secret.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.secret.expose_secret());
+        println!("++++++++++++++++");
+        */
+    }
+}
+
+pub struct ConjugateCodingMeasure {
+    /// The measurement outcomes array. Length equals to 2*total_size.
+    meas_outcomes: SecretBox<Vec<u8>>,
+    /// The choices of bases for each couple of measurements. Length equals total_size.
+    meas_choices: SecretBox<Vec<u8>>,
+}
+
+impl ConjugateCodingMeasure {}
+
+pub struct ConjugateCodingResult {
+    /// The measurement_outcomes array purged from measurement noise. Length equals measurement_outcomes/2.
+    purged_outcomes: SecretBox<Vec<u8>>,
     /// The purged_outcomes array purged from the security bits. It encodes the final secret bitstring. Legnth equals secret_size.
     secret: SecretBox<Vec<u8>>,
 }
 
-///
-/// @brief   Prints the current protocol context to screen.
-///
-/// @param ctx:       Pointer to the context struct;
-/// @param format:    Bitstring format: b binary (default), x hex, d decimal.
-///
-///
-fn conjugate_coding_print_context(ctx: &ConjugateCodingContext) {
-    println!("===============");
-    println!("PROTOCOL CONTEXT");
-    println!("++++++++++++++++");
-    println!("Provided by preparing party");
-    println!("----------------");
-    println!("secret_size:    {}", ctx.secret_size);
-    println!("security_size:    {}", ctx.security_size);
-    println!("----------------");
-    println!("orderings");
-    println!(
-        "size:    {}/{}",
-        &ctx.orderings.expose_secret().len(),
-        &ctx.orderings.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.orderings.expose_secret());
-    println!("----------------");
-    println!("bitmask");
-    println!(
-        "size:    {}/{}",
-        &ctx.bitmask.expose_secret().len(),
-        &ctx.bitmask.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.bitmask.expose_secret());
-    println!("----------------");
-    println!("security parameters 0");
-    println!(
-        "size:    {}/{}",
-        &ctx.security0.expose_secret().len(),
-        &ctx.security0.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.security0.expose_secret());
-    println!("----------------");
-    println!("security parameters 1");
-    println!(
-        "size:    {}/{}",
-        &ctx.security1.expose_secret().len(),
-        &ctx.security1.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.security1.expose_secret());
-    println!("++++++++++++++++");
-    println!("++++++++++++++++");
-    println!("Provided by preparing party");
-    println!("----------------");
-    println!("measurement outcomes");
-    println!(
-        "size:    {}/{}",
-        &ctx.meas_outcomes.expose_secret().len(),
-        &ctx.meas_outcomes.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.meas_outcomes.expose_secret());
-    println!("----------------");
-    println!("choices of bases");
-    println!(
-        "size:    {}/{}",
-        &ctx.meas_choices.expose_secret().len(),
-        &ctx.meas_choices.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.meas_choices.expose_secret());
-    println!("++++++++++++++++");
-    println!("++++++++++++++++");
-    println!("Computed");
-    println!("----------------");
-    println!("total_size:    {}", ctx.total_size);
-    println!("----------------");
-    println!("Purged outcomes");
-    println!(
-        "size:    {}/{}",
-        &ctx.purged_outcomes.expose_secret().len(),
-        &ctx.purged_outcomes.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.purged_outcomes.expose_secret());
-    println!("----------------");
-    println!("Secret");
-    println!(
-        "size:    {}/{}",
-        &ctx.secret.expose_secret().len(),
-        &ctx.secret.expose_secret().capacity()
-    );
-    println!("value:    {:?}", &ctx.secret.expose_secret());
-    println!("++++++++++++++++");
-}
-
-///
-/// @brief   Sets the size in bytes for secret_size and security_size in the protocol context.
-///          Proceed by reserving all the needed memory in the protocol context.
-///
-///          Should be called by the party preparing the qubits.
-///
-/// @param ctx:            Pointer to the context struct;
-/// @param secret_size:    How many bytes we want to the secret bitstring to be. Suggested default is 32;
-/// @param security_size:  How many bytes we want to use as security bits. Suggested default is 32.
-///
-///
-fn conjugate_coding_init(secret_size: usize, security_size: usize) -> ConjugateCodingContext {
-    let ctx: ConjugateCodingContext = ConjugateCodingContext {
-        secret_size,
-        security_size,
-        total_size: secret_size + security_size,
-        orderings: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        bitmask: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        security0: SecretBox::new(Box::new(Vec::with_capacity(security_size))),
-        security1: SecretBox::new(Box::new(Vec::with_capacity(security_size))),
-        meas_outcomes: SecretBox::new(Box::new(Vec::with_capacity(
-            2 * (secret_size + security_size),
-        ))),
-        meas_choices: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        purged_outcomes: SecretBox::new(Box::new(Vec::with_capacity(secret_size + security_size))),
-        secret: SecretBox::new(Box::new(Vec::with_capacity(secret_size))),
-    };
-
-    ctx
-}
+impl ConjugateCodingResult {}
 
 // Helper function. Checks if the n-th bit of a byte is 1.
 fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
@@ -223,9 +266,9 @@ fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
     byte & mask[bit] != 0
 }
 
-fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
+fn vector_is_balanced(vec: &SecretBox<Vec<u8>>, secret_size: usize, security_size: usize) -> bool {
     let (mut zeroes, mut ones): (usize, usize) = (0, 0);
-    for byte in vec.iter() {
+    for byte in vec.expose_secret().iter() {
         for j in 0..8 {
             if is_nth_bit_set(*byte, j) {
                 ones += 1;
@@ -234,18 +277,10 @@ fn vector_is_balanced(vec: Vec<u8>, secret_size: usize, security_size: usize) {
             }
         }
     }
-    assert_eq!(
-        zeroes,
-        8 * secret_size,
-        "Vector is not balanced. There are {} zeroes instead of {}.",
-        zeroes,
-        8 * secret_size
-    );
-    assert_eq!(
-        ones,
-        8 * security_size,
-        "Vector is not balanced. There are {} zeroes instead of {}.",
-        ones,
-        8 * security_size
-    );
+
+    if zeroes == 8 * secret_size && ones == 8 * security_size {
+        true
+    } else {
+        false
+    }
 }
