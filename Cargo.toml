@@ -17,3 +17,4 @@ secrecy = "0.10.3"
 zeroize = { version = "1.8.1", features = ["derive"] }
 embedded-io         = { version = "0.6.1", default-features = false }
 zeroize_derive = "1.4.2"
+rustls-post-quantum = "0.2.1"
