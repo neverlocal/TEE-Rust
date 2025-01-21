@@ -48,9 +48,9 @@ use alloc::vec::Vec;
 use alloc::boxed::Box;
 
 use esp_alloc as _;
-use esp_println::println;
+use esp_println::{print, println};
+
 use core::assert_eq;
-use core::writeln;
 
 /// Ensure memory protection over cryptographically sensitive data.
 use secrecy::{ExposeSecret, SecretBox};
