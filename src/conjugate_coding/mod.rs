@@ -43,12 +43,21 @@
 //!      thus returing the final secret string.
 //!
 
+extern crate alloc;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+
+use esp_alloc as _;
+use esp_println::println;
+use core::assert_eq;
+use core::writeln;
+
 /// Ensure memory protection over cryptographically sensitive data.
 use secrecy::{ExposeSecret, SecretBox};
 /// Ensure that cryptographically sensitive data is zeroed into oblivion after use.
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-#[derive(Zeroize, ZeroizeOnDrop)]
+//#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ConjugateCodingContext {
     ///
     /// The whole protocol status is stored in a struct.

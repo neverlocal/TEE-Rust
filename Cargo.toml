@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+esp-alloc = "0.6.0"
 esp-hal = { version = "0.23.1", features = ["esp32c3"] }
 esp-backtrace = { version = "0.15.0", features = [
     "esp32c3",

@@ -8,7 +8,6 @@ use esp_hal::{
     main,
 };
 use esp_println::println;
-
 mod conjugate_coding;
 
 #[main]
