@@ -19,9 +19,13 @@
         devShells.default = with pkgs; mkShell {
           buildInputs = [
             openssl
+            espflash
             (rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" ];
-              targets = [ "riscv32imc-unknown-none-elf" "riscv32imac-unknown-none-elf" ];
+              targets = [ 
+                "riscv32imc-unknown-none-elf" 
+                "riscv32imac-unknown-none-elf" 
+              ];
             })
           ];
         };

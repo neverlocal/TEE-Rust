@@ -4,5 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+esp-hal = { version = "0.23.1", features = ["esp32c3"] }
+esp-backtrace = { version = "0.15.0", features = [
+    "esp32c3",
+    "panic-handler",
+    "exception-handler",
+    "println",
+] }
+esp-println = { version = "0.13.0", features = ["esp32c3"] }
 secrecy = "0.10.3"
 zeroize = { version = "1.8.1", features = ["derive"] }
