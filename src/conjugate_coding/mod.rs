@@ -205,7 +205,7 @@ pub struct ConjugateCodingMeasure {
     choices: SecretBox<Vec<u8>>,
 }
 
-enum ConjugateCodingMeasureError {
+pub enum ConjugateCodingMeasureError {
     // outcomes vector has the wrong length
     OutcomesWL,
     // choiches vector has the wrong length
@@ -274,43 +274,161 @@ impl ConjugateCodingMeasure {
 
 pub struct ConjugateCodingResult {
     /// The measurement_outcomes array purged from measurement noise. Length equals measurement_outcomes/2.
-    purged_outcomes: SecretBox<Vec<u8>>,
+    purged: SecretBox<Vec<u8>>,
     /// The purged_outcomes array purged from the security bits. It encodes the final secret bitstring. Legnth equals secret_size.
     secret: SecretBox<Vec<u8>>,
 }
 
+enum ConjugateCodingResultError {
+    // outcomes vector has the wrong length
+    OutcomesWL,
+    // choiches vector has the wrong length
+    ChoicesWL,
+}
+
 impl ConjugateCodingResult {
 
+    ///
+    /// @brief   Prints struct information on screen.
+    ///
+    pub fn diagnostics(&self) {
+        println!("===============");
+        println!("COMPUTED CONTEXT");
+        println!("++++++++++++++++");
+        println!("----------------");
+        println!("Purged outcomes");
+        println!(
+            "size:    {}/{}",
+            self.purged.expose_secret().len(),
+            self.purged.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.purged.expose_secret());
+        println!("----------------");
+        println!("Secret");
+        println!(
+            "size:    {}/{}",
+            self.secret.expose_secret().len(),
+            self.secret.expose_secret().capacity()
+        );
+        println!("value:    {:?}", self.secret.expose_secret());
+        println!("===============");
+    }
 
+    /// @brief   Sets the struct fields.
+    ///
+    ///          Should be called by the party preparing the qubits.
+    /// @param preparation:   A reference to the preparation context;
+    /// @param measurements:  A reference to the measurement context;
+    ///
+    pub fn new(
+        preparation: &ConjugateCodingPrepare,
+        measurement: &ConjugateCodingMeasure,
+    ){ //-> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>> {
 
+        let purged: SecretBox<Vec<u8>> = Self::conjugate_coding_purge_noise(&preparation, &measurement);
 
+      //  let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
 
+        // if outcomes.expose_secret().len() != 2*preparation.total_size {
+        //     error_vec.push(ConjugateCodingMeasureError::OutcomesWL);
+        // }
+        // if choices.expose_secret().len() != preparation.total_size {
+        //     error_vec.push(ConjugateCodingMeasureError::ChoicesWL);
+        // }
+        // if error_vec.len() > 0 {
+        //     return Err(error_vec);
+        // }
 
+        // Ok(ConjugateCodingResult {
+        //     outcomes,
+        //     choices,
+        // })
+    }
 
+    ///
+    /// @brief   Breaks meas_outcomes in the protocol context into chunks of 2 bits;
+    ///          For the i-th chunk, it uses meas_choices[i] (which bit we wanted to measure)
+    ///          and orderings[i] (which qubit encoded which bit) in the context to determine
+    ///          which bit in the chunk to keep.
+    ///          Then stores the result in the protocol context.
+    ///
+    ///          Should be called by the party receiving the qubits, after measurement is performed.
+    ///
+    /// @param preparation:   A reference to the preparation context;
+    /// @param measurements:  A reference to the measurement context;
+    ///
+    /// @return purged:       The measurement.outcomes vector, purged from noise.
+    fn conjugate_coding_purge_noise (
+        preparation: &ConjugateCodingPrepare,
+        measurement: &ConjugateCodingMeasure,
+    ) -> SecretBox<Vec<u8>> {
+        let mut purged:Vec<u8> = Vec::new();
+        // We iterate on each byte;
+        for i in 0..preparation.total_size {
+            let xor = measurement.choices.expose_secret()[i] ^ preparation.orderings.expose_secret()[i];
+            // We iterate over the bits of each byte
+            for j in 0..8 {
+                let mut mask: u8 = 0;
+                // We check if the j-th bit of the i-th byte of xor is 0 or 1;
+                // Case 0: we keep the 1st bit and discard the 2nd.
+                if is_nth_bit_set(xor,j) == false {
+                    // j = 0 -> meas_outcomes[2i],   0th bit
+                    // j = 1 -> meas_outcomes[2i],   2nd bit
+                    // j = 2 -> meas_outcomes[2i],   4th bit
+                    // j = 3 -> meas_outcomes[2i],   6th bit
+                    // j = 4 -> meas_outcomes[2i+1], 0th bit
+                    // j = 5 -> meas_outcomes[2i+1], 2nd bit
+                    // j = 6 -> meas_outcomes[2i+1], 4th bit
+                    // j = 7 -> meas_outcomes[2i+1], 6th bit
+                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*i + (j/4)],(2*j)%8) {
+                        mask = 1 << (7-j);
+                    }
+                // Case 1: we keep the 2nd bit and discard the 1st.
+                } else {
+                    // j = 0 -> meas_outcomes[2i],   1st bit
+                    // j = 1 -> meas_outcomes[2i],   3rd bit
+                    // j = 2 -> meas_outcomes[2i],   5th bit
+                    // j = 3 -> meas_outcomes[2i],   7th bit
+                    // j = 4 -> meas_outcomes[2i+1], 1st bit
+                    // j = 5 -> meas_outcomes[2i+1], 3rd bit
+                    // j = 6 -> meas_outcomes[2i+1], 5th bit
+                    // j = 7 -> meas_outcomes[2i+1], 7th bit
+                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*i + (j/4)],((2*j)%8)+1) {
+                        mask = 1 << (7-j);
+                    }
+                }
+                purged.push(mask);
+            }
+        }
+        return SecretBox::new(Box::new(purged));    
+    }
 
-
-    // println!("++++++++++++++++");
-    // println!("++++++++++++++++");
-    // println!("Computed");
-    // println!("----------------");
-    // println!("total_size:    {}", self.total_size);
-    // println!("----------------");
-    // println!("Purged outcomes");
-    // println!(
-    //     "size:    {}/{}",
-    //     self.purged_outcomes.expose_secret().len(),
-    //     self.purged_outcomes.expose_secret().capacity()
-    // );
-    // println!("value:    {:?}", self.purged_outcomes.expose_secret());
-    // println!("----------------");
-    // println!("Secret");
-    // println!(
-    //     "size:    {}/{}",
-    //     self.secret.expose_secret().len(),
-    //     self.secret.expose_secret().capacity()
-    // );
-    // println!("value:    {:?}", self.secret.expose_secret());
-    // println!("++++++++++++++++");
+    ///
+    /// @brief   The actual security check. It verifies that the quantum measurement
+    ///          has actually happened and that the receiving party isn't feeding us
+    ///          bullshit bits. Does so by looking at the protocol context,
+    ///          and using the information at bitmask to single out bits in purged_outcomes.
+    ///          For each bit, depending on the choice of measurement basis, it checks
+    ///          if it equals the corresponding valye in eisecurity or security1.
+    ///          
+    ///          Since the receiving party doesn't know the bitstring, bruteforcing the
+    ///          security proof requires to call this function, in the worst case:
+    ///          \f[
+    ///              \sum_{i=1}^security_size biomialCoefficient(total_size, i)
+    ///          \f]
+    ///
+    ///          Should be called by the party receiving the qubits, after measurement is performed.
+    ///
+    /// @param preparation:   A reference to the preparation context;
+    /// @param measurements:  A reference to the measurement context;
+    ///
+    fn conjugate_coding_verify (
+        preparation: &ConjugateCodingPrepare,
+        measurement: &ConjugateCodingMeasure,
+        purged: &SecretBox<Vec<u8>>
+    ) {
+        
+    }
 
 
 }
