@@ -844,12 +844,14 @@ dependencies = [
 name = "tee-rust"
 version = "0.1.0"
 dependencies = [
+ "embedded-io",
  "esp-alloc",
  "esp-backtrace",
  "esp-hal",
  "esp-println",
  "secrecy",
  "zeroize",
+ "zeroize_derive",
 ]
 
 [[package]]
