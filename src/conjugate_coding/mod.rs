@@ -63,17 +63,17 @@ pub struct ConjugateCodingPrepare {
     /// All information from the qubit preparing party
     /// is encapsulated in this structure.
     /// 
-    /// Size in bytes of the final secret.  Normally 32.
+    /// Size in bytes of the final secret.  Normally 32;
     secret_size:   usize,
-    /// Size in bytes of the security bits. Normally 32.
+    /// Size in bytes of the security bits. Normally 32;
     security_size: usize,
-    /// secret_size + security_size. Normally 64.
+    /// secret_size + security_size. Normally 64;
     total_size:    usize,
-    /// For each couple of qubits in conjugate coding, which qubit encodes which bit. For each bit, 0 means '1st qbit encodes 1st bit'. Length of the array equals total_size.
+    /// For each couple of qubits in conjugate coding, which qubit encodes which bit. For each bit, 0 means '1st qbit encodes 1st bit'. Length of the array equals total_size;
     orderings:     SecretBox<Vec<u8>>,
-    /// The bit mask array, which says which bits of purged_outcomes are used for security. Length equals total_size. Must contain precisely security_size 1s and secret_size 0s.
+    /// The bit mask array, which says which bits of purged_outcomes are used for security. Length equals total_size. Must contain precisely security_size 1s and secret_size 0s;
     bitmask:       SecretBox<Vec<u8>>,
-    /// The array used for checking security in the 0 measurement case. Length equals security_size.
+    /// The array used for checking security in the 0 measurement case. Length equals security_size;
     security0:     SecretBox<Vec<u8>>,
     /// The array used for checking security in the 1 measurement case. Length equals security_size.
     security1:     SecretBox<Vec<u8>>,
@@ -174,7 +174,7 @@ impl ConjugateCodingPrepare {
         if security1.expose_secret().len() != security_size {
             error_vec.push(ConjugateCodingPrepareError::Security1WL);
         }
-        if !vector_is_balanced(&bitmask, secret_size, security_size) {
+        if !Self::vector_is_balanced(&bitmask, secret_size, security_size) {
             error_vec.push(ConjugateCodingPrepareError::BitmaskUnbalanced);
         }
         if error_vec.len() > 0 {
@@ -192,6 +192,24 @@ impl ConjugateCodingPrepare {
         })
     }
     
+    fn vector_is_balanced(vec: &SecretBox<Vec<u8>>, secret_size: usize, security_size: usize) -> bool {
+        let (mut zeroes, mut ones): (usize, usize) = (0, 0);
+        for byte in vec.expose_secret().iter() {
+            for bit in 0..8 {
+                if is_nth_bit_set(*byte, bit) {
+                    ones += 1;
+                } else {
+                    zeroes += 1;
+                }
+            }
+        }
+    
+        if zeroes == 8 * secret_size && ones == 8 * security_size {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub struct ConjugateCodingMeasure {
@@ -244,7 +262,7 @@ impl ConjugateCodingMeasure {
     ///
     ///          Should be called by the party preparing the qubits.
     /// @outcomes: The orderings vector, of length 2*(secret_size + security_size);
-    /// @choices:  The vector containing choices of measurement bases, of length (secret_size + security_size);
+    /// @choices:  The vector containing choices of measurement bases, of length (secret_size + security_size).
     ///
     pub fn new(
         preparation: &ConjugateCodingPrepare,
@@ -279,11 +297,11 @@ pub struct ConjugateCodingResult {
     secret: SecretBox<Vec<u8>>,
 }
 
-enum ConjugateCodingResultError {
+pub enum ConjugateCodingResultError {
     // outcomes vector has the wrong length
-    OutcomesWL,
+    Security0Fail,
     // choiches vector has the wrong length
-    ChoicesWL,
+    Security1Fail,
 }
 
 impl ConjugateCodingResult {
@@ -318,14 +336,26 @@ impl ConjugateCodingResult {
     ///
     ///          Should be called by the party preparing the qubits.
     /// @param preparation:   A reference to the preparation context;
-    /// @param measurements:  A reference to the measurement context;
+    /// @param measurements:  A reference to the measurement context.
     ///
     pub fn new(
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
-    ){ //-> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>> {
+    ) -> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>>{ //-> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>> {
 
-        let purged: SecretBox<Vec<u8>> = Self::conjugate_coding_purge_noise(&preparation, &measurement);
+        let purged: SecretBox<Vec<u8>> = Self::purge_noise(&preparation, &measurement);
+        match Self::verify(&preparation,&measurement, &purged) {
+            Ok(()) => {
+                let secret = Self::compute_secret(&preparation, &purged);
+                Ok(ConjugateCodingResult{
+                    purged,
+                    secret,
+                })
+            },
+            Err(error_vec) => {
+                return Err(error_vec);
+            }
+        }
 
       //  let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
 
@@ -355,23 +385,20 @@ impl ConjugateCodingResult {
     ///          Should be called by the party receiving the qubits, after measurement is performed.
     ///
     /// @param preparation:   A reference to the preparation context;
-    /// @param measurements:  A reference to the measurement context;
+    /// @param measurements:  A reference to the measurement context.
     ///
     /// @return purged:       The measurement.outcomes vector, purged from noise.
-    fn conjugate_coding_purge_noise (
+    fn purge_noise (
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
     ) -> SecretBox<Vec<u8>> {
         let mut purged:Vec<u8> = Vec::new();
-        // We iterate on each byte;
-        for i in 0..preparation.total_size {
-            let xor = measurement.choices.expose_secret()[i] ^ preparation.orderings.expose_secret()[i];
-            // We iterate over the bits of each byte
-            for j in 0..8 {
+        for byte in 0..preparation.total_size {
+            let xor = measurement.choices.expose_secret()[byte] ^ preparation.orderings.expose_secret()[byte];
+            for bit in 0..8 {
                 let mut mask: u8 = 0;
-                // We check if the j-th bit of the i-th byte of xor is 0 or 1;
                 // Case 0: we keep the 1st bit and discard the 2nd.
-                if is_nth_bit_set(xor,j) == false {
+                if is_nth_bit_set(xor,bit) == false {
                     // j = 0 -> meas_outcomes[2i],   0th bit
                     // j = 1 -> meas_outcomes[2i],   2nd bit
                     // j = 2 -> meas_outcomes[2i],   4th bit
@@ -380,8 +407,8 @@ impl ConjugateCodingResult {
                     // j = 5 -> meas_outcomes[2i+1], 2nd bit
                     // j = 6 -> meas_outcomes[2i+1], 4th bit
                     // j = 7 -> meas_outcomes[2i+1], 6th bit
-                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*i + (j/4)],(2*j)%8) {
-                        mask = 1 << (7-j);
+                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*byte + (bit/4)],(2*bit)%8) {
+                        mask = 1 << (7-bit);
                     }
                 // Case 1: we keep the 2nd bit and discard the 1st.
                 } else {
@@ -393,8 +420,8 @@ impl ConjugateCodingResult {
                     // j = 5 -> meas_outcomes[2i+1], 3rd bit
                     // j = 6 -> meas_outcomes[2i+1], 5th bit
                     // j = 7 -> meas_outcomes[2i+1], 7th bit
-                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*i + (j/4)],((2*j)%8)+1) {
-                        mask = 1 << (7-j);
+                    if is_nth_bit_set(measurement.outcomes.expose_secret()[2*byte + (bit/4)],((2*bit)%8)+1) {
+                        mask = 1 << (7-bit);
                     }
                 }
                 purged.push(mask);
@@ -421,53 +448,85 @@ impl ConjugateCodingResult {
     ///
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context;
+    /// @param purged:        A reference to the purged mesurements vector.
     ///
-    fn conjugate_coding_verify (
+    fn verify (
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
         purged: &SecretBox<Vec<u8>>
-    ) {
-        
+    )  -> Result<(), Vec<ConjugateCodingResultError>> {
+        let mut error_vec: Vec<ConjugateCodingResultError> = Vec::new();
+    
+        // We keep the count of how many 1s in the bitmask we encountered so far.
+        let mut counter: usize = 0;
+
+        for byte in 0..preparation.total_size {
+            for bit in 0..8 {
+                // We found a 1 in the bitmask!
+                if is_nth_bit_set(preparation.bitmask.expose_secret()[byte], bit) {
+                    // If we measured the 1st bit, we need to use security0.
+                    if !is_nth_bit_set(measurement.choices.expose_secret()[byte], bit) {
+                        if is_nth_bit_set(purged.expose_secret()[byte],bit)
+                            != is_nth_bit_set(preparation.security0.expose_secret()[counter/8],counter%8) {
+                                error_vec.push(ConjugateCodingResultError::Security0Fail);
+                            }
+                    // If we measured the 2nd bit, we need to use security1.
+                    } else {
+                        if is_nth_bit_set(purged.expose_secret()[byte],bit)
+                            != is_nth_bit_set(preparation.security1.expose_secret()[counter/8],counter%8) {
+                                error_vec.push(ConjugateCodingResultError::Security1Fail);
+                            }                        
+                    }
+                    counter += 1;
+                }
+            }
+            if counter == 8*preparation.security_size {
+                break;
+            }
+        }
+
+        if error_vec.len() > 0 {
+            return Err(error_vec);
+        }
+
+        Ok(())
     }
 
+    ///
+    // @brief   Looks at bitmask and purged_outcomes in the protocol context,
+    ///          purges purged_outcomes of the security bits and stores the result
+    ///          into secret.
+    ///
+    ///          Should be called by the party receiving the qubits, after measurement is performed.
+    ///
+    /// @param preparation:  Pointer to the preparation context
+    /// @param purged:       Pointer to the measurement vector, purged from noise.
+    ///
+    ///
+    fn compute_secret(
+        preparation: &ConjugateCodingPrepare,
+        purged: &SecretBox<Vec<u8>>
+    ) -> SecretBox<Vec<u8>>{
+        let mut secret:Vec<u8> = Vec::new();
+        let mut mask:u8;
 
+        for byte in 0.. preparation.total_size {
+            mask = 0;
+            for bit in 0..8 {
+                // We found a 0 in the bitmask. This value we keep.
+                if !is_nth_bit_set(preparation.bitmask.expose_secret()[byte],bit) 
+                    && is_nth_bit_set(purged.expose_secret()[byte],bit)
+                    { mask += 1 << (7 - bit) }                
+            }
+            secret.push(mask);
+        }
+        return SecretBox::new(Box::new(secret));    
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // Helper function. Checks if the n-th bit of a byte is 1.
 fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
     let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
 
     byte & mask[bit] != 0
-}
-
-fn vector_is_balanced(vec: &SecretBox<Vec<u8>>, secret_size: usize, security_size: usize) -> bool {
-    let (mut zeroes, mut ones): (usize, usize) = (0, 0);
-    for byte in vec.expose_secret().iter() {
-        for j in 0..8 {
-            if is_nth_bit_set(*byte, j) {
-                ones += 1;
-            } else {
-                zeroes += 1;
-            }
-        }
-    }
-
-    if zeroes == 8 * secret_size && ones == 8 * security_size {
-        true
-    } else {
-        false
-    }
 }
