@@ -559,6 +559,11 @@ fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn is_nth_bit_set_test() {
+
+    }
+
     fn PrepareFuzzyVectors() {
 
     }
