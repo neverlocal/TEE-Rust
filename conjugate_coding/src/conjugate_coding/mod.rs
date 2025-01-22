@@ -18,10 +18,9 @@
 //! Example protocol run:
 //!
 //! SENDING PARTY CALLS:
-//! conjugate_coding_init: sets
+//! ConjugateCodingPrepare.new(): sets
 //!      -- The secret string lenght;
 //!      -- The amount of supplementary security bits to use.
-//! conjugate_coding_setup: sets
 //!      -- The orderings (which qubits encode which bits);
 //!      -- The bit mask (which bits are security string);
 //!      -- The values that the measurement should have at
@@ -35,17 +34,19 @@
 //!      Again, outside of this codebease and performed QKD-style.
 //!
 //! RECEIVING PARTY CALLS:
-//! conjugate_coding_measure: sets
+//! conjugateCodingMeasure.new(&preparation: ConjugateCodingPrepare): sets
 //!      -- The measurement outcomes;
 //!      -- The choices of measurement basis for each couple of qubits.
-//! conjugate_coding_purge_noise: purges the measurement bit string
-//!      from the noise introduced by conjugate coding.
-//! conjugate_coding_verify: verified that at specific locations specify by
-//!      the bitmask, measurement outcomes are as expected.
-//!      This ensures the information stored in orderings cannot be extracted
-//!      by replaying the protocol.
-//! conjugate_coding_compute_secret: purges the bitstring from the security bits,
-//!      thus returing the final secret string.
+//! conjugateCodingResult.new(
+//!    &preparation: ConjugateCodingPrepare,
+//!    &measurement: ConjugateCodingMeasure
+//!   ). This function performs several tasks:
+//!      -- Purges the measurement bit string from the noise introduced by conjugate coding;
+//!      -- Verifies that at specific locations specified by the bitmask, 
+//!         measurement outcomes are as expected. This ensures the information
+//!         stored in orderings cannot be extracted by replaying the protocol;
+//!      -- If the verification passes, purges the bitstring from the 
+//!         security bits, thus returing the final secret string.
 //!
 
 #[cfg(feature = "std")]
@@ -219,6 +220,7 @@ impl ConjugateCodingPrepare {
             security0,
             security1,
         })
+        
     }
     
     fn vector_is_balanced(vec: &SecretBox<Vec<u8>>, secret_size: usize, security_size: usize) -> bool {
@@ -230,6 +232,7 @@ impl ConjugateCodingPrepare {
         }
         if zeroes == 8 * secret_size && ones == 8 * security_size { true } else { false }
     }
+
 }
 
 pub struct ConjugateCodingMeasure {
@@ -549,4 +552,49 @@ impl ConjugateCodingResult {
 fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
     let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
     byte & mask[bit] != 0
+}
+
+// TODO. We should use a fuzzer to create random vectors, and feed them to the protocol.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn PrepareFuzzyVectors() {
+
+    }
+
+    #[test]
+    fn PrepareWrongLengths() {
+
+    }
+
+    #[test]
+    fn PrepareUnbalanced() {
+
+    }
+
+    #[test]
+    fn PrepareRightLengths() {
+
+    }
+
+    #[test]
+    fn MeasureWrongLengths() {
+
+    }
+
+    #[test]
+    fn ComputeSecurity0Fail() {
+
+    }
+
+    #[test]
+    fn ComputeSecurity1Fail() {
+
+    }
+
+    #[test]
+    fn ComputeOk() {
+
+    }
 }
