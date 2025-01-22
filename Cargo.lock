@@ -63,6 +63,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "conjugate_coding"
+version = "0.1.0"
+dependencies = [
+ "secrecy",
+ "zeroize",
+]
+
+[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -844,14 +852,12 @@ dependencies = [
 name = "tee-rust"
 version = "0.1.0"
 dependencies = [
+ "conjugate_coding",
  "embedded-io",
  "esp-alloc",
  "esp-backtrace",
  "esp-hal",
  "esp-println",
- "secrecy",
- "zeroize",
- "zeroize_derive",
 ]
 
 [[package]]

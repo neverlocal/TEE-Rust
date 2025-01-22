@@ -1,5 +1,5 @@
 [package]
-name = "conjugate-coding"
+name = "conjugate_coding"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,5 +8,6 @@ std = []
 no_std = []
 debug = []
 
+[dependencies]
 secrecy = "0.10.3"
 zeroize = { version = "1.8.1", features = ["derive", "alloc"] }
