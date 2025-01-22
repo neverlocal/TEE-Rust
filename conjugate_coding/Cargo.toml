@@ -1,0 +1,12 @@
+[package]
+name = "tee-rust"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+std = []
+no_std = []
+debug = []
+
+secrecy = "0.10.3"
+zeroize = { version = "1.8.1", features = ["derive", "alloc"] }

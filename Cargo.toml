@@ -3,11 +3,6 @@ name = "tee-rust"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-std = []
-no_std = []
-debug = []
-
 [dependencies]
 esp-alloc = "0.6.0"
 esp-hal = { version = "0.23.1", features = ["esp32c3"] }
