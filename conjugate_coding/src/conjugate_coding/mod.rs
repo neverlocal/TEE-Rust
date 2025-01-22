@@ -561,7 +561,51 @@ mod tests {
 
     #[test]
     fn is_nth_bit_set_test() {
+        let zero: u8 = 0b00000000;
+        let fst: u8  = 0b10000000;
+        let snd: u8  = 0b01000000;
+        let trd: u8  = 0b00100000;
+        let fth: u8  = 0b00010000;
+        let fft: u8  = 0b00001000;
+        let sth: u8  = 0b00000100;
+        let svt: u8  = 0b00000010;
+        let eth: u8  = 0b00000001;
+        assert!(is_nth_bit_set(fst, 0));
+        assert!(is_nth_bit_set(snd, 1));
+        assert!(is_nth_bit_set(trd, 2));
+        assert!(is_nth_bit_set(fth, 3));
+        assert!(is_nth_bit_set(fft, 4));
+        assert!(is_nth_bit_set(sth, 5));
+        assert!(is_nth_bit_set(svt, 6));
+        assert!(is_nth_bit_set(eth, 7));
 
+        for bit in 0..8 {
+        assert!(!is_nth_bit_set(zero, bit));
+        if bit != 0 {
+            assert!(!is_nth_bit_set(fst, bit))
+        }
+        if bit != 1 {
+            assert!(!is_nth_bit_set(snd, bit))
+        }
+        if bit != 2 {
+            assert!(!is_nth_bit_set(trd, bit))
+        }
+        if bit != 3 {
+            assert!(!is_nth_bit_set(fth, bit))
+        }
+        if bit != 4 {
+            assert!(!is_nth_bit_set(fft, bit))
+        }
+        if bit != 5 {
+            assert!(!is_nth_bit_set(sth, bit))
+        }
+        if bit != 6 {
+            assert!(!is_nth_bit_set(svt, bit))
+        }
+        if bit != 7 {
+            assert!(!is_nth_bit_set(eth, bit))
+        }
+        }
     }
 
     fn PrepareFuzzyVectors() {
