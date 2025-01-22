@@ -66,6 +66,7 @@ dependencies = [
 name = "conjugate_coding"
 version = "0.1.0"
 dependencies = [
+ "esp-println",
  "secrecy",
  "zeroize",
 ]
