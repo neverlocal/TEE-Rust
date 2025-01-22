@@ -10,6 +10,11 @@
 //! and run on a TEE to make sure the protocol developed
 //! is cryptographically secure.
 //!
+//! All structs used implement Zeroize and ZeroizeOnDrop,
+//! ensuring memory is overwritten after use.
+//! 
+//! Library is no_std friendly.
+//! 
 //! Example protocol run:
 //!
 //! SENDING PARTY CALLS:
@@ -43,21 +48,28 @@
 //!      thus returing the final secret string.
 //!
 
-extern crate alloc;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-use core::writeln;
-use esp_alloc as _;
-use esp_println::println;
+#[cfg(feature = "std")]
+pub use std::*;
 
-use core::assert_eq;
+#[cfg(not(feature = "std"))]
+pub extern crate alloc;
+#[cfg(not(feature = "std"))]
+pub use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+pub use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+pub use esp_println::println;
+#[cfg(not(feature = "std"))]
+pub use core::writeln;
+
 
 /// Ensure memory protection over cryptographically sensitive data.
+/// Track every time a secret is accessed. Moreover, ensure that 
+/// cryptographically sensitive data is zeroed into oblivion after use.
 use secrecy::{ExposeSecret, SecretBox};
-/// Ensure that cryptographically sensitive data is zeroed into oblivion after use.
-//use zeroize_derive::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
+use zeroize::ZeroizeOnDrop;
 
-//#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ConjugateCodingPrepare {
     ///
     /// All information from the qubit preparing party
@@ -78,6 +90,20 @@ pub struct ConjugateCodingPrepare {
     /// The array used for checking security in the 1 measurement case. Length equals security_size.
     security1:     SecretBox<Vec<u8>>,
 }
+
+impl Zeroize for ConjugateCodingPrepare {
+    fn zeroize(&mut self) {
+        self.secret_size = 0;
+        self.security_size = 0;
+        self.total_size = 0;
+        self.orderings.zeroize();
+        self.bitmask.zeroize();
+        self.security0.zeroize();
+        self.security1.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for ConjugateCodingPrepare {}
 
 pub enum ConjugateCodingPrepareError {
     // orderings vector has the wrong length
@@ -140,7 +166,9 @@ impl ConjugateCodingPrepare {
         println!("===============");
     }
 
-    /// @brief   Sets the struct fields.
+    /// @brief   Sets the struct fields. Automatically checks that all
+    ///          the vectors provided are of the right length, and that
+    ///          bitmask contains precisely security_size 1s and secret_size 0s.
     ///
     ///          Should be called by the party preparing the qubits.
     ///
@@ -196,19 +224,10 @@ impl ConjugateCodingPrepare {
         let (mut zeroes, mut ones): (usize, usize) = (0, 0);
         for byte in vec.expose_secret().iter() {
             for bit in 0..8 {
-                if is_nth_bit_set(*byte, bit) {
-                    ones += 1;
-                } else {
-                    zeroes += 1;
-                }
+                if is_nth_bit_set(*byte, bit) { ones += 1; } else { zeroes += 1 }
             }
         }
-    
-        if zeroes == 8 * secret_size && ones == 8 * security_size {
-            true
-        } else {
-            false
-        }
+        if zeroes == 8 * secret_size && ones == 8 * security_size { true } else { false }
     }
 }
 
@@ -222,6 +241,15 @@ pub struct ConjugateCodingMeasure {
     /// The choices of bases for each couple of measurements. Length equals total_size.
     choices: SecretBox<Vec<u8>>,
 }
+
+impl Zeroize for ConjugateCodingMeasure {
+    fn zeroize(&mut self) {
+        self.outcomes.zeroize();
+        self.choices.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for ConjugateCodingMeasure {}
 
 pub enum ConjugateCodingMeasureError {
     // outcomes vector has the wrong length
@@ -258,11 +286,14 @@ impl ConjugateCodingMeasure {
         println!("===============");
     }
 
-   /// @brief   Sets the struct fields.
+    /// @brief   Sets the struct fields. Automatically verifies that
+    ///          all vectors provided are of the right length.
     ///
     ///          Should be called by the party preparing the qubits.
-    /// @outcomes: The orderings vector, of length 2*(secret_size + security_size);
-    /// @choices:  The vector containing choices of measurement bases, of length (secret_size + security_size).
+    /// 
+    /// @param preparation:   A reference to the preparation context;
+    /// @outcomes:            The orderings vector, of length 2*(secret_size + security_size);
+    /// @choices:             The vector containing choices of measurement bases, of length (secret_size + security_size).
     ///
     pub fn new(
         preparation: &ConjugateCodingPrepare,
@@ -297,10 +328,19 @@ pub struct ConjugateCodingResult {
     secret: SecretBox<Vec<u8>>,
 }
 
+impl Zeroize for ConjugateCodingResult {
+    fn zeroize(&mut self) {
+        self.purged.zeroize();
+        self.secret.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for ConjugateCodingResult {}
+
 pub enum ConjugateCodingResultError {
-    // outcomes vector has the wrong length
+    // At least one bit in the bitmask did not agree with bits in preparation.security0
     Security0Fail,
-    // choiches vector has the wrong length
+    // At least one bit in the bitmask did not agree with bits in preparation.security1
     Security1Fail,
 }
 
@@ -332,21 +372,25 @@ impl ConjugateCodingResult {
         println!("===============");
     }
 
-    /// @brief   Sets the struct fields.
-    ///
+    /// @brief   Sets the struct fields. Automatically verifies
+    ///          that the measurement context passes the security
+    ///          verification as dictated by the prepare context.
+    /// 
     ///          Should be called by the party preparing the qubits.
+    /// 
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context.
     ///
     pub fn new(
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
-    ) -> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>>{ //-> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>> {
+    ) -> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>>{
 
         let purged: SecretBox<Vec<u8>> = Self::purge_noise(&preparation, &measurement);
+
         match Self::verify(&preparation,&measurement, &purged) {
             Ok(()) => {
-                let secret = Self::compute_secret(&preparation, &purged);
+                let secret: SecretBox<Vec<u8>> = Self::compute_secret(&preparation, &purged);
                 Ok(ConjugateCodingResult{
                     purged,
                     secret,
@@ -356,38 +400,20 @@ impl ConjugateCodingResult {
                 return Err(error_vec);
             }
         }
-
-      //  let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
-
-        // if outcomes.expose_secret().len() != 2*preparation.total_size {
-        //     error_vec.push(ConjugateCodingMeasureError::OutcomesWL);
-        // }
-        // if choices.expose_secret().len() != preparation.total_size {
-        //     error_vec.push(ConjugateCodingMeasureError::ChoicesWL);
-        // }
-        // if error_vec.len() > 0 {
-        //     return Err(error_vec);
-        // }
-
-        // Ok(ConjugateCodingResult {
-        //     outcomes,
-        //     choices,
-        // })
     }
 
     ///
-    /// @brief   Breaks meas_outcomes in the protocol context into chunks of 2 bits;
-    ///          For the i-th chunk, it uses meas_choices[i] (which bit we wanted to measure)
+    /// @brief   Breaks outcomes in the measurement context into chunks of 2 bits;
+    ///          For the i-th chunk, it uses choices[i] (which bit we wanted to measure)
     ///          and orderings[i] (which qubit encoded which bit) in the context to determine
     ///          which bit in the chunk to keep.
     ///          Then stores the result in the protocol context.
-    ///
-    ///          Should be called by the party receiving the qubits, after measurement is performed.
     ///
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context.
     ///
     /// @return purged:       The measurement.outcomes vector, purged from noise.
+    ///
     fn purge_noise (
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
@@ -439,12 +465,10 @@ impl ConjugateCodingResult {
     ///          if it equals the corresponding valye in eisecurity or security1.
     ///          
     ///          Since the receiving party doesn't know the bitstring, bruteforcing the
-    ///          security proof requires to call this function, in the worst case:
+    ///          security proof would require to call this function, in the worst case:
     ///          \f[
     ///              \sum_{i=1}^security_size biomialCoefficient(total_size, i)
     ///          \f]
-    ///
-    ///          Should be called by the party receiving the qubits, after measurement is performed.
     ///
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context;
@@ -455,6 +479,7 @@ impl ConjugateCodingResult {
         measurement: &ConjugateCodingMeasure,
         purged: &SecretBox<Vec<u8>>
     )  -> Result<(), Vec<ConjugateCodingResultError>> {
+
         let mut error_vec: Vec<ConjugateCodingResultError> = Vec::new();
     
         // We keep the count of how many 1s in the bitmask we encountered so far.
@@ -480,33 +505,26 @@ impl ConjugateCodingResult {
                     counter += 1;
                 }
             }
-            if counter == 8*preparation.security_size {
-                break;
-            }
+            if counter == 8*preparation.security_size { break }
         }
 
-        if error_vec.len() > 0 {
-            return Err(error_vec);
-        }
-
+        if error_vec.len() > 0 { return Err(error_vec) }
         Ok(())
     }
 
     ///
-    // @brief   Looks at bitmask and purged_outcomes in the protocol context,
-    ///          purges purged_outcomes of the security bits and stores the result
+    // @brief   Looks at bitmask and purged in the computed context,
+    ///          purges purged of the security bits and stores the result
     ///          into secret.
-    ///
-    ///          Should be called by the party receiving the qubits, after measurement is performed.
     ///
     /// @param preparation:  Pointer to the preparation context
     /// @param purged:       Pointer to the measurement vector, purged from noise.
-    ///
     ///
     fn compute_secret(
         preparation: &ConjugateCodingPrepare,
         purged: &SecretBox<Vec<u8>>
     ) -> SecretBox<Vec<u8>>{
+
         let mut secret:Vec<u8> = Vec::new();
         let mut mask:u8;
 
@@ -527,6 +545,5 @@ impl ConjugateCodingResult {
 // Helper function. Checks if the n-th bit of a byte is 1.
 fn is_nth_bit_set(byte: u8, bit: usize) -> bool {
     let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
-
     byte & mask[bit] != 0
 }
