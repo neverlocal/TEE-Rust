@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 std = []
 no_std = []
+debug = []
 
 [dependencies]
 esp-alloc = "0.6.0"

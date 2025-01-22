@@ -120,6 +120,7 @@ pub enum ConjugateCodingPrepareError {
 
 impl ConjugateCodingPrepare {
 
+    #[cfg(feature = "debug")]
     ///
     /// @brief   Prints struct information on screen.
     ///
@@ -260,6 +261,7 @@ pub enum ConjugateCodingMeasureError {
 
 impl ConjugateCodingMeasure {
     
+    #[cfg(feature = "debug")]
     ///
     /// @brief   Prints struct information on screen.
     ///
@@ -346,6 +348,7 @@ pub enum ConjugateCodingResultError {
 
 impl ConjugateCodingResult {
 
+    #[cfg(feature = "debug")]
     ///
     /// @brief   Prints struct information on screen.
     ///
