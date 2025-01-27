@@ -10,9 +10,14 @@ esp-backtrace = { version = "0.15.0", features = [
     "esp32c3",
     "panic-handler",
     "exception-handler",
-    "println",
+    "defmt",
 ] }
-esp-println = { version = "0.13.0", features = ["esp32c3"] }
+esp-println = { version = "0.13.0", features = [
+    "esp32c3",
+    "log",
+    "defmt-espflash",
+] }
+defmt = "0.3.10"
 embedded-io         = { version = "0.6.1", default-features = false }
 conjugate_coding = { path = "./conjugate_coding" }
 serde = { version = "1.0.217",  default-features = false, features = ["derive"] }

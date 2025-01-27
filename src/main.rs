@@ -5,6 +5,7 @@ extern crate alloc;
 use core::ptr::addr_of_mut;
 
 use esp_backtrace as _;
+use esp_println as _;
 use esp_alloc as _;
 
 use esp_hal::{
@@ -44,7 +45,8 @@ fn main() -> ! {
 
     let mut aes = Aes::new(peripherals.AES);
 
-    let keytext = "SUp4SeCp@sSw0rd".as_bytes();
+    // Hardcoded keys are obviously insecure. Consider this just an example!
+    let keytext = "SUp4SeCp@sSw0rd".as_bytes(); 
     let plaintext = "message".as_bytes();
     
     // create an array with aes128 key size
@@ -63,5 +65,12 @@ fn main() -> ! {
     let hw_decrypted = block;
 
     println!("Hello, world!");
+
+    defmt::trace!("trace");
+    defmt::debug!("debug");
+    defmt::info!("info");
+    defmt::warn!("warn");
+    defmt::error!("error");
+    
     loop {};
 }
