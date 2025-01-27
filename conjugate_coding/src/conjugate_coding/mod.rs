@@ -63,6 +63,7 @@ pub use esp_println::println;
 #[cfg(not(feature = "std"))]
 pub use core::writeln;
 
+use serde::Deserialize;
 
 /// Ensure memory protection over cryptographically sensitive data.
 /// Track every time a secret is accessed. Moreover, ensure that 
@@ -71,6 +72,7 @@ use secrecy::{ExposeSecret, SecretBox};
 use zeroize::Zeroize;
 use zeroize::ZeroizeOnDrop;
 
+#[derive(Deserialize, Debug)]
 pub struct ConjugateCodingPrepare {
     ///
     /// All information from the qubit preparing party
@@ -106,6 +108,7 @@ impl Zeroize for ConjugateCodingPrepare {
 
 impl ZeroizeOnDrop for ConjugateCodingPrepare {}
 
+#[derive(Deserialize, Debug)]
 pub enum ConjugateCodingPrepareError {
     // orderings vector has the wrong length
     OrderingsWL,
@@ -222,6 +225,41 @@ impl ConjugateCodingPrepare {
         })
         
     }
+
+    /// @brief   Works as new, but accepts plaintext values and boxes them automatically.
+    ///
+    ///          Should be called by the party preparing the qubits.
+    ///
+    /// @param secret_size:    How many bytes we want to the secret bitstring to be. Suggested default is 32;
+    /// @param security_size:  How many bytes we want to use as security bits. Suggested default is 32.
+    /// @param orderings:      The orderings vector, of length secret_size + security_size;
+    /// @param bitmask:        The bitmask vector, of length secret_size + security_size;
+    /// @param security0:      The security values vector for 1st bit measurements, of length security_size;
+    /// @param security1:      The security values vector for 2nd bit measurements, of length security_size.
+    ///
+    pub fn new_plaintext(
+        secret_size: usize,
+        security_size: usize,
+        orderings: Vec<u8>,
+        bitmask: Vec<u8>,
+        security0: Vec<u8>,
+        security1: Vec<u8>,
+    ) -> Result<ConjugateCodingPrepare, Vec<ConjugateCodingPrepareError>> {
+
+        let boxed_orderings = SecretBox::new(Box::new(orderings));
+        let boxed_bitmask = SecretBox::new(Box::new(bitmask));
+        let boxed_security0 = SecretBox::new(Box::new(security0));
+        let boxed_security1 = SecretBox::new(Box::new(security1));
+
+        return Self::new(
+            secret_size,
+            security_size,
+            boxed_orderings,
+            boxed_bitmask,
+            boxed_security0,
+            boxed_security1
+        );
+    }
     
     fn vector_is_balanced(vec: &SecretBox<Vec<u8>>, secret_size: usize, security_size: usize) -> bool {
         let (mut zeroes, mut ones): (usize, usize) = (0, 0);
@@ -235,6 +273,7 @@ impl ConjugateCodingPrepare {
 
 }
 
+#[derive(Deserialize, Debug)]
 pub struct ConjugateCodingMeasure {
     ///
     /// All information from the qubit measuring party
@@ -323,6 +362,31 @@ impl ConjugateCodingMeasure {
             choices,
         })
     }
+
+    /// @brief   Works as new, but accepts plaintext values and boxes them automatically.
+    ///
+    ///          Should be called by the party preparing the qubits.
+    /// 
+    /// @param preparation:   A reference to the preparation context;
+    /// @outcomes:            The orderings vector, of length 2*(secret_size + security_size);
+    /// @choices:             The vector containing choices of measurement bases, of length (secret_size + security_size).
+    ///
+    pub fn new_plaintext(
+        preparation: &ConjugateCodingPrepare,
+        outcomes: Vec<u8>,
+        choices: Vec<u8>,
+    ) -> Result<ConjugateCodingMeasure, Vec<ConjugateCodingMeasureError>> {
+
+        let boxed_outcomes = SecretBox::new(Box::new(outcomes));
+        let boxed_choices = SecretBox::new(Box::new(choices));
+
+        return Self::new(
+            preparation,
+            boxed_outcomes,
+            boxed_choices,
+        );
+    }
+    
 
 }
 

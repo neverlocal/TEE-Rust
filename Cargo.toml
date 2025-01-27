@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 esp-alloc = "0.6.0"
-esp-hal = { version = "0.23.1", features = ["esp32c3"] }
+esp-hal = { version = "0.23.1", features = ["esp32c3", "unstable"] }
 esp-backtrace = { version = "0.15.0", features = [
     "esp32c3",
     "panic-handler",
@@ -15,3 +15,4 @@ esp-backtrace = { version = "0.15.0", features = [
 esp-println = { version = "0.13.0", features = ["esp32c3"] }
 embedded-io         = { version = "0.6.1", default-features = false }
 conjugate_coding = { path = "./conjugate_coding" }
+serde = { version = "1.0.217",  default-features = false, features = ["derive"] }

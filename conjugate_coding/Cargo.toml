@@ -10,8 +10,9 @@ debug = []
 
 [dependencies]
 esp-println = { version = "0.13.0", features = ["esp32c3"] }
-secrecy = "0.10.3"
+secrecy = { version = "0.10.3", features = ["serde"] }
 zeroize = { version = "1.8.1", features = ["derive", "alloc"] }
+serde = { version = "1.0.217",  default-features = false, features = ["derive"] }
 
 [lib]
 test = false
