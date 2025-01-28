@@ -4,20 +4,45 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+
+# Esp dependencies
 esp-alloc = "0.6.0"
-esp-hal = { version = "0.23.1", features = ["esp32c3", "unstable"] }
+esp-hal = { version = "0.23.1", features = [
+    "esp32c3",
+    "unstable",
+] }
 esp-backtrace = { version = "0.15.0", features = [
     "esp32c3",
     "panic-handler",
     "exception-handler",
     "defmt",
 ] }
+
+# USB device and serial dependencies
+usb-device = { version="0.3.2", features=["defmt"]}
+usbd-serial = "0.2.2"
 esp-println = { version = "0.13.0", features = [
     "esp32c3",
     "log",
     "defmt-espflash",
 ] }
+embassy-usb = { version = "0.4.0" }
+
 defmt = "0.3.10"
 embedded-io         = { version = "0.6.1", default-features = false }
-conjugate_coding = { path = "./conjugate_coding" }
+embedded-io-async = "0.6.1"
 serde = { version = "1.0.217",  default-features = false, features = ["derive"] }
+
+# Embassy and async execution
+embassy-executor = "0.7.0"
+embassy-futures = "0.1.1"
+esp-hal-embassy = { version = "0.6.0", features = ["esp32c3"] }
+static_cell = "2.1.0"
+embassy-sync = "0.6.2"
+
+# Conjugate coding
+conjugate_coding = { path = "./conjugate_coding" }
+
+
+
+
