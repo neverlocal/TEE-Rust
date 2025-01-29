@@ -1,23 +1,27 @@
 #![no_std]
 #![no_main]
 
-extern crate alloc;
-use core::ptr::addr_of_mut;
+extern crate alloc; // no_std requires a custom allocator
+use core::ptr::addr_of_mut; // Needed to initialize heap
 
+// Logging, printing etc.
 use esp_backtrace as _;
 use esp_println as _;
-use defmt;
+use defmt:: {trace, info, debug, warn, error, println};
 
 use esp_hal::{
-    clock::CpuClock,
-    aes::Aes, // AES ecnryption-decryption scheme
-    aes::Mode, // AES mode (128, 256, etc)
-    delay::Delay,
-    timer::timg::TimerGroup,
-    timer::timg::MwdtStage,
-    time::Duration,
+    clock::CpuClock,                // Set the CPU clock
+    aes::Aes,                       // AES ecnryption-decryption scheme
+    aes::Mode,                      // AES mode (128, 256, etc)
+    delay::Delay,                   // Needed to reset the watchdog and for setting delays
+    timer::timg::TimerGroup,        // Needed to reset the watchdog
+    timer::timg::MwdtStage,         // Needed to reset the watchdog
+    time::Duration,                 // Needed to reset the watchdog and for setting delays
+    usb_serial_jtag::UsbSerialJtag, // Needed to communicate over USB
     main
 };
+
+use embedded_io::Write;
 
 use serde::{Serialize, Deserialize}; // We do like our JSON very much
 
@@ -39,8 +43,12 @@ fn init_heap() { // Function to initialize the heap memory
 
 #[main]
 fn main() -> ! {
-    defmt::info!("This is TEE-Rust.");
 
+    info!("This is TEE-Rust.");
+
+////////////////
+// HEAP STUFF //
+////////////////
     // Here we initialize the heap and the peripherals
     init_heap();
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -52,9 +60,7 @@ fn main() -> ! {
     //     config.cpu_clock = CpuClock::max();
     //     config
     // });
-
-    
-    defmt::debug!("Heap initialized.");
+    info!("Heap initialized.");
     
     // let mut aes = Aes::new(peripherals.AES);
 
@@ -77,25 +83,43 @@ fn main() -> ! {
     // aes.process(&mut block, Mode::Decryption256, keybuf);
     // let hw_decrypted = block;
 
-    let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let mut wdt = timg0.wdt;
+//////////////
+// Watchdog //
+//////////////
+    // Esp32 chips have a nasty watchdog
+    // that decides to kill your program
+    // if the same task runs for too long.
+    // Here we create a watchdog and constanly
+    // feed it to avoid this.
+    let timg0 = TimerGroup::new(peripherals.TIMG0); // Create a new timer
+    let mut wdt = timg0.wdt;                        // Use it to create a new watchdog
     
-    wdt.set_timeout(MwdtStage::Stage0, Duration::secs(600));
-    wdt.enable();
+    wdt.set_timeout(MwdtStage::Stage0, Duration::secs(600)); // Watchdog triggers after n secs of inactivity
+    wdt.enable();                                            // We enable the damn thing
 
-    defmt::trace!("trace");
-    defmt::debug!("debug");
-    defmt::info!("info");
-    defmt::warn!("warn");
-    defmt::error!("error");
-    let delay = Delay::new();
+//////////////////
+// Serial Comms //
+//////////////////
+    let mut usb_serial = UsbSerialJtag::new(peripherals.USB_DEVICE);
+    //let (mut rx, mut tx) = usb_serial.split();
+
+    ///////////////
+// MAIN LOOP //
+///////////////
+
+    let delay = Delay::new(); // Initialize delay
     loop {
-        defmt::trace!("trace");
-        defmt::debug!("debug");
-        defmt::info!("info");
-        defmt::warn!("warn");
-        defmt::error!("error!");
-        defmt::println!("Hello world.");
+        trace!("trace");
+        debug!("debug");
+        info!("info");
+        warn!("warn");
+        error!("error!");
+        println!("Hello world.");
+
+        writeln!(
+            usb_serial,
+            "Please don't let Jesus cry"
+        ).ok();
         delay.delay_millis(1000);
         wdt.feed();
     }
