@@ -80,7 +80,7 @@ fn main() -> ! {
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let mut wdt = timg0.wdt;
     
-    wdt.set_timeout(MwdtStage::Stage0, Duration::millis(5000));
+    wdt.set_timeout(MwdtStage::Stage0, Duration::secs(600));
     wdt.enable();
 
     defmt::trace!("trace");
