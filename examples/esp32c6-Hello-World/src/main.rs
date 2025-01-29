@@ -4,6 +4,7 @@
 extern crate alloc; // no_std requires a custom allocator
 use core::ptr::addr_of_mut; // Needed to initialize heap
 
+use conjugate_coding::conjugate_coding::ConjugateCodingPrepare;
 // Logging, printing etc.
 use defmt::{debug, error, info, println, trace, warn};
 use esp_backtrace as _;
@@ -21,9 +22,9 @@ use esp_hal::{
 
 use core::result::Result;
 use serde_json::Value;
-// use serde::{Deserialize, Serialize}; // We do like our JSON very much
+use serde::{Deserialize, Serialize}; // We do like our JSON very much
 
-// use conjugate_coding; // Finally the only meaningful thing in a sea of boilerplate
+use conjugate_coding; // Finally the only meaningful thing in a sea of boilerplate
 
 pub use alloc::vec;
 pub use alloc::vec::Vec;
@@ -88,22 +89,34 @@ fn main() -> ! {
         info!("JTAG interface initialized.");
     let mut buffer: Vec<u8> = vec![0;0];
         info!("Consol buffer initialized.");
+
 ///////////////////
 // State Machine //
 ///////////////////
-enum StateMachine {
-    FirstDialog,        // Greetings etc.
-    PreparationInput,   // 
-    PreparationAssign,  //
-    SecondPrompt,       //
-    MeasurementInput,   //
-    MeasurementAssign,  //
-    ComputeSecret,      //
-    RunProgram,         //
-    FinalDialog,        //
-}
-let mut state_machine: StateMachine = StateMachine::FirstDialog;
-    info!("Protocol state machine initialized.");
+    enum StateMachine {
+        FirstDialog,        // Greetings etc.
+        PreparationInput,   // 
+        PreparationAssign,  //
+        SecondPrompt,       //
+        MeasurementInput,   //
+        MeasurementAssign,  //
+        ComputeSecret,      //
+        RunProgram,         //
+        FinalDialog,        //
+    }
+    let mut state_machine: StateMachine = StateMachine::FirstDialog;
+        info!("Protocol state machine initialized.");
+
+
+    #[derive(Deserialize)]
+    pub struct ConjugateCodingPlaintext {
+        secret_size:   usize,
+        security_size: usize,
+        orderings:     Vec<u8>,
+        bitmask:       Vec<u8>,
+        security0:     Vec<u8>,
+        security1:     Vec<u8>,
+    }
 
 ///////////////
 // MAIN LOOP //
@@ -121,26 +134,49 @@ let mut state_machine: StateMachine = StateMachine::FirstDialog;
                 println!("[ PREPARATION ] Press CTRL+D (UTF8 0004, EOT) to submit information.");
                 state_machine = StateMachine::PreparationInput;
                     info!("[ FistDialog ] Protocol transitioning to state 'PreparationInput'.");
+                wdt.feed();
             },
             StateMachine::PreparationInput => {
                 let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
                 if (buffer.len() > 0) && buffer[buffer.len()-1] == 04 {
-                        println!("");
-                        info!("[ PreparationInput ] Information submitted. Buffer: {=[u8]:x}", buffer);
+                    println!("");
+                    println!("[ PREPARATION ] Information submitted. Validating...");
+                        info!("[ PreparationInput ] Buffer: {=[u8]:x}", buffer);
                     buffer.pop();
                         info!("[ PreparationInput ] Got rid of EOT char. New buffer: {=[u8]:x}", buffer);
-                    let v: Value = serde_json::from_slice(&buffer).unwrap();
-                        info!("[ PreparationInput ] Serde correctly parsed input.");
-                    buffer.clear();
-                        info!("[ PreparationInput ] Buffer has been cleared: New buffer: {=[u8]:x}", buffer);
-                    state_machine = StateMachine::PreparationAssign;
-                        info!("[ PreparationInput ] Protocol transitioning to state 'PreparationAssign'.");
+                    match serde_json::from_slice::<ConjugateCodingPlaintext>(&buffer) {
+                        Err(e) => {
+                            error!("Serde wasn't able to parse the string. Restarting protocol...");
+                            buffer.clear();
+                                info!("[ PreparationInput ] Buffer has been cleared: New buffer: {=[u8]:x}", buffer);                            
+                            state_machine = StateMachine::FirstDialog;
+                        },
+                        Ok(deserialized_buffer) => {
+                            match ConjugateCodingPrepare::new_plaintext(
+                                deserialized_buffer.secret_size,
+                                deserialized_buffer.security_size,
+                                deserialized_buffer.orderings,
+                                deserialized_buffer.bitmask,
+                                deserialized_buffer.security0,
+                                deserialized_buffer.security1) 
+                            {
+                                Ok(result) => {},
+                                Err(e) => {println!("Edit me")}
+                            }
+                            println!("[ PREPARATION ] Information validated.");
+                            buffer.clear();
+                                info!("[ PreparationInput ] Buffer has been cleared: New buffer: {=[u8]:x}", buffer);
+                            //deserialized_buffer,
+                            state_machine = StateMachine::PreparationAssign;
+                            info!("[ PreparationInput ] Protocol transitioning to state 'PreparationAssign'.");
+                        }
+                    };
                 }
+                wdt.feed();
             }
-            StateMachine::PreparationAssign => (),
-            _ => ()
+            StateMachine::PreparationAssign => wdt.feed(),
+            _ => wdt.feed()
         }        
-        wdt.feed();
     }
 }
 
