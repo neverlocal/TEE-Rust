@@ -31,3 +31,4 @@ serde = { version = "1.0.217",  default-features = false, features = ["derive"] 
 
 # Conjugate coding
 conjugate_coding = { path = "../../conjugate_coding_library" }
+serde_json = { version = "1.0.138", default-features = false, features = ["alloc"] }
