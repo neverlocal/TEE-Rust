@@ -672,42 +672,42 @@ mod tests {
         }
     }
 
-    fn PrepareFuzzyVectors() {
+    fn prepare_fuzzy_vectors() {
 
     }
 
     #[test]
-    fn PrepareWrongLengths() {
+    fn prepare_wrong_lengths() {
 
     }
 
     #[test]
-    fn PrepareUnbalanced() {
+    fn prepare_unbalanced() {
 
     }
 
     #[test]
-    fn PrepareRightLengths() {
+    fn prepare_right_lengths() {
 
     }
 
     #[test]
-    fn MeasureWrongLengths() {
+    fn measure_wrong_lengths() {
 
     }
 
     #[test]
-    fn ComputeSecurity0Fail() {
+    fn compute_security0_fail() {
 
     }
 
     #[test]
-    fn ComputeSecurity1Fail() {
+    fn compute_security1_fail() {
 
     }
 
     #[test]
-    fn ComputeOk() {
+    fn compute_ok() {
 
     }
 }
