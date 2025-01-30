@@ -35,7 +35,7 @@ use serde::{ Deserialize, Deserializer}; // We do like our JSON very much
 
 // Finally the only meaningful thing in a sea of boilerplate
 use conjugate_coding; 
-use conjugate_coding::conjugate_coding::{ConjugateCodingMeasure, ConjugateCodingPrepare};
+use conjugate_coding::conjugate_coding::{ConjugateCodingMeasure, ConjugateCodingPrepare, ConjugateCodingResult};
 
 fn init_heap() {
     // Function to initialize the heap memory
@@ -327,8 +327,17 @@ fn main() -> ! {
                 wdt.feed();
                     debug!("[ MeasurementInput ] Watchdog fed.");
             }
-
-            _ => wdt.feed()
+        
+        StateMachine::ComputeSecret => {
+            let computed = ConjugateCodingResult::new(&preparation,&measurement);
+            wdt.feed();
+            state_machine = StateMachine::RunProgram;
+        }
+        StateMachine::RunProgram => {
+            wdt.feed();
+            state_machine = StateMachine::FinalDialog;
+        }
+        StateMachine::FinalDialog => wdt.feed()
         }        
     }
 }

@@ -787,43 +787,4 @@ mod tests {
         }
         }
     }
-
-    fn prepare_fuzzy_vectors() {
-
-    }
-
-    #[test]
-    fn prepare_wrong_lengths() {
-
-    }
-
-    #[test]
-    fn prepare_unbalanced() {
-
-    }
-
-    #[test]
-    fn prepare_right_lengths() {
-
-    }
-
-    #[test]
-    fn measure_wrong_lengths() {
-
-    }
-
-    #[test]
-    fn compute_security0_fail() {
-
-    }
-
-    #[test]
-    fn compute_security1_fail() {
-
-    }
-
-    #[test]
-    fn compute_ok() {
-
-    }
 }
