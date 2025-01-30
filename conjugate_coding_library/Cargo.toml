@@ -7,12 +7,14 @@ edition = "2021"
 std = []
 no_std = []
 debug = []
+defmt = []
 
 [dependencies]
 esp-println = { version = "0.13.0", features = ["esp32c6"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 zeroize = { version = "1.8.1", features = ["derive", "alloc"] }
 serde = { version = "1.0.217",  default-features = false, features = ["derive"] }
+defmt = { version = "0.3.10", features = [ "alloc" ] }
 
 [lib]
 test = false

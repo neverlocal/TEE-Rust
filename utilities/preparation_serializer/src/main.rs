@@ -7,15 +7,14 @@ extern crate text_io;
 // Serializatin stuff
 use hex;
 use serde::{Serialize, Serializer};
-// Rewrite memory locations with 0s after drop
-// Useful for security reasons
+// Rewrite memory locations with 0s after drop, useful for security reasons
 use zeroize::{Zeroize, ZeroizeOnDrop};
 // Our library!
 use conjugate_coding::{self, conjugate_coding::ConjugateCodingPrepare};
 
 // Data structure holding all the needed params in one place.
 #[derive(Zeroize, ZeroizeOnDrop, Serialize)]
-struct PlainData {
+struct ConjugateCodingPreparePlaintext {
     secret_size: usize,
     security_size: usize,
     orderings: Vec<u8>,
@@ -25,7 +24,7 @@ struct PlainData {
 }
 
 // We serialize vectors as hex strings to save memory in the TEE.
-fn serialize_vec_as_hex_string<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_vec_to_hex_string<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -35,20 +34,20 @@ where
 // We implement the custom serialization function
 // We convert the Vec<u8> into arrays of bytes on the flight,
 // then serialize them as hex strings.
-impl PlainData {
+impl ConjugateCodingPreparePlaintext {
     fn serialize(&self) -> Result<String, serde_json::Error> {
         // Use #[serde(serialize_with = "...")] to apply the custom serializer
         #[derive(Serialize)]
         struct HexPlainData<'a> {
             secret_size: usize,
             security_size: usize,
-            #[serde(serialize_with = "serialize_vec_as_hex_string")]
+            #[serde(serialize_with = "serialize_vec_to_hex_string")]
             orderings: &'a [u8],
-            #[serde(serialize_with = "serialize_vec_as_hex_string")]
+            #[serde(serialize_with = "serialize_vec_to_hex_string")]
             bitmask: &'a [u8],
-            #[serde(serialize_with = "serialize_vec_as_hex_string")]
+            #[serde(serialize_with = "serialize_vec_to_hex_string")]
             security0: &'a [u8],
-            #[serde(serialize_with = "serialize_vec_as_hex_string")]
+            #[serde(serialize_with = "serialize_vec_to_hex_string")]
             security1: &'a [u8],
         }
         // Create a temporary struct with the same data
@@ -84,7 +83,7 @@ fn main() {
         .init(); // Avoid displaying timestamps in logs
     debug!("Environment logger set and initialized.");
 
-    let mut plain_data = PlainData {
+    let mut plain_data = ConjugateCodingPreparePlaintext {
         secret_size: 0,
         security_size: 0,
         orderings: vec![0; 0],
@@ -118,7 +117,7 @@ fn main() {
                        purposes. Use at your own risk!"
                 );
                 state_machine = StateMachine::SecretInput;
-                debug!("[ FirstDialog ] Protocol transitioned to 'SecretInput'.");
+                debug!("[ FirstDialog ] Protocol transitioned to state 'SecretInput'.");
             }
             StateMachine::SecretInput => {
                 println!("--------------------------------------------------");
@@ -138,7 +137,7 @@ fn main() {
                             plain_data.secret_size
                         );
                         state_machine = StateMachine::SecurityInput;
-                        debug!("[ SecretInput ] Protocol transitioned to 'SecurityInput'.")
+                        debug!("[ SecretInput ] Protocol transitioned to state 'SecurityInput'.")
                     }
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
@@ -148,7 +147,7 @@ fn main() {
                             "[ SecretInput ] secret_size wiped. secret_size: {}",
                             plain_data.secret_size
                         );
-                        debug!("[ SecretInput ] Protocol transitioned to 'SecretInput'.");
+                        debug!("[ SecretInput ] Protocol transitioned to state 'SecretInput'.");
                     }
                 }
             }
@@ -170,7 +169,7 @@ fn main() {
                             plain_data.security_size
                         );
                         state_machine = StateMachine::OrderingsInput;
-                        debug!("[ SecurityInput ] Protocol transitioned to 'OrderingsInput'.")
+                        debug!("[ SecurityInput ] Protocol transitioned to state 'OrderingsInput'.")
                     }
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
@@ -180,7 +179,7 @@ fn main() {
                             "[ SecurityInput ] security_size wiped. security_size: {}",
                             plain_data.security_size
                         );
-                        debug!("[ SecurityInput ] Protocol transitioned to 'SecurityInput'.");
+                        debug!("[ SecurityInput ] Protocol transitioned to state 'SecurityInput'.");
                     }
                 }
             }
@@ -231,7 +230,7 @@ fn main() {
                     plain_data.orderings
                 );
                 state_machine = StateMachine::BitmaskInput;
-                debug!("[ OrderingsInput ] Protocol transitioned to 'BitmaskInput'.");
+                debug!("[ OrderingsInput ] Protocol transitioned to state 'BitmaskInput'.");
             }
             StateMachine::BitmaskInput => {
                 println!("--------------------------------------------------");
@@ -278,7 +277,7 @@ fn main() {
                     plain_data.bitmask
                 );
                 state_machine = StateMachine::Security0Input;
-                debug!("[ BitmaskInput ] Protocol transitioned to 'Security0Input'.");
+                debug!("[ BitmaskInput ] Protocol transitioned to state 'Security0Input'.");
             }
             StateMachine::Security0Input => {
                 println!("--------------------------------------------------");
@@ -327,7 +326,7 @@ fn main() {
                     plain_data.security0
                 );
                 state_machine = StateMachine::Security1Input;
-                debug!("[ Security0Input ] Protocol transitioned to 'Security1Input'.");
+                debug!("[ Security0Input ] Protocol transitioned to state 'Security1Input'.");
             }
             StateMachine::Security1Input => {
                 println!("--------------------------------------------------");
@@ -376,7 +375,7 @@ fn main() {
                     plain_data.security1
                 );
                 state_machine = StateMachine::Output;
-                debug!("[ Security1Input ] Protocol transitioned to 'Output'.");
+                debug!("[ Security1Input ] Protocol transitioned to state 'Output'.");
             }
             StateMachine::Output => {
                 println!("--------------------------------------------------");
@@ -406,7 +405,7 @@ fn main() {
                             Err(e) => error!("Something went wrong: Error: {:?}. Please try again!", e)
                         }
                     }
-                    Err(e) => error!("Your data could not pass validation for the following reason: {:?}. Please start again.",e)
+                    Err(e) => error!("Your data could not pass validation for the following reason(s): {:?}. Please start again.",e)
                 };
                 break;
             }

@@ -49,15 +49,21 @@
 //!         security bits, thus returing the final secret string.
 //!
 
+
 pub extern crate alloc;
 pub use alloc::boxed::Box;
 pub use alloc::vec::Vec;
+pub use alloc::vec;
 
 #[cfg(not(feature = "std"))]
 pub use esp_println::println;
-
 #[cfg(not(feature = "std"))]
 pub use core::writeln;
+
+#[cfg(feature = "defmt")]
+use defmt::{Format, Formatter, write};
+#[cfg(feature = "std")]
+use core::fmt;
 
 use serde::Deserialize;
 
@@ -68,7 +74,7 @@ use secrecy::{ExposeSecret, SecretBox};
 use zeroize::Zeroize;
 use zeroize::ZeroizeOnDrop;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct ConjugateCodingPrepare {
     ///
     /// All information from the qubit preparing party
@@ -104,19 +110,66 @@ impl Zeroize for ConjugateCodingPrepare {
 
 impl ZeroizeOnDrop for ConjugateCodingPrepare {}
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub enum ConjugateCodingPrepareError {
     // orderings vector has the wrong length
-    OrderingsWrongLength,
+    OrderingsWL,
     // bitmask vector has the wrong length
-    BitmaskWrongLength,
+    BitmaskWL,
     // security0 vector has the wrong length
-    Security0WrongLength,
+    Security0WL,
     // security1 vector has the wrong length
-    Security1WrongLength,
+    Security1WL,
     // bitmask vector is not balanced
-    BitmaskUnbalanced,
+    BitmaskNotBalanced,
 }
+
+#[cfg(feature = "std")]
+impl fmt::Debug for ConjugateCodingPrepareError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConjugateCodingPrepareError::OrderingsWL => {
+                write!(fmt, "\"Orderings bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::BitmaskWL => {
+                write!(fmt, "\"Bitmask bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::Security0WL => {
+                write!(fmt, "\"Security0 bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::Security1WL => {
+                write!(fmt, "\"Security1 bitstring bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::BitmaskNotBalanced => {
+                write!(fmt, "\"Bitmask bitstring is not balanced\"")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl Format for ConjugateCodingPrepareError {
+    fn format(&self, fmt: Formatter) {
+        match self {
+            ConjugateCodingPrepareError::OrderingsWL => {
+                write!(fmt, "\"Orderings bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::BitmaskWL => {
+                write!(fmt, "\"Bitmask bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::Security0WL => {
+                write!(fmt, "\"Security0 bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::Security1WL => {
+                write!(fmt, "\"Security1 bitstring bitstring has the wrong length\"")
+            }
+            ConjugateCodingPrepareError::BitmaskNotBalanced => {
+                write!(fmt, "\"Bitmask bitstring is not balanced\"")
+            }
+        }
+    }
+}
+
 
 impl ConjugateCodingPrepare {
 
@@ -192,19 +245,19 @@ impl ConjugateCodingPrepare {
         let mut error_vec: Vec<ConjugateCodingPrepareError> = Vec::new();
 
         if orderings.expose_secret().len() != total_size {
-            error_vec.push(ConjugateCodingPrepareError::OrderingsWrongLength);
+            error_vec.push(ConjugateCodingPrepareError::OrderingsWL);
         }
         if bitmask.expose_secret().len() != total_size {
-            error_vec.push(ConjugateCodingPrepareError::BitmaskWrongLength);
+            error_vec.push(ConjugateCodingPrepareError::BitmaskWL);
         }
         if security0.expose_secret().len() != security_size {
-            error_vec.push(ConjugateCodingPrepareError::Security0WrongLength);
+            error_vec.push(ConjugateCodingPrepareError::Security0WL);
         }
         if security1.expose_secret().len() != security_size {
-            error_vec.push(ConjugateCodingPrepareError::Security1WrongLength);
+            error_vec.push(ConjugateCodingPrepareError::Security1WL);
         }
         if !Self::vector_is_balanced(&bitmask, secret_size, security_size) {
-            error_vec.push(ConjugateCodingPrepareError::BitmaskUnbalanced);
+            error_vec.push(ConjugateCodingPrepareError::BitmaskNotBalanced);
         }
         if error_vec.len() > 0 {
             return Err(error_vec);
@@ -220,6 +273,20 @@ impl ConjugateCodingPrepare {
             security1,
         })
         
+    }
+
+    /// @brief   Creates a struct filled with zero values.
+    ///
+    pub fn new_from_zero() -> ConjugateCodingPrepare {
+        return ConjugateCodingPrepare {
+            secret_size: 0,
+            security_size: 0,
+            total_size: 0,
+            orderings: SecretBox::new(Box::new(vec![0;0])),
+            bitmask: SecretBox::new(Box::new(vec![0;0])),
+            security0: SecretBox::new(Box::new(vec![0;0])),
+            security1: SecretBox::new(Box::new(vec![0;0])),
+        }
     }
 
     /// @brief   Works as new, but accepts plaintext values and boxes them automatically.
@@ -292,9 +359,37 @@ impl ZeroizeOnDrop for ConjugateCodingMeasure {}
 
 pub enum ConjugateCodingMeasureError {
     // outcomes vector has the wrong length
-    OutcomesWrongLength,
+    OutcomesWL,
     // choiches vector has the wrong length
-    ChoicesWrongLength,
+    ChoicesWL,
+}
+
+#[cfg(feature = "std")]
+impl fmt::Debug for ConjugateCodingMeasureError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConjugateCodingMeasureError::OutcomesWL => {
+                write!(fmt, "\"Measurement outcomes bitstring has the wrong length\"")
+            }
+            ConjugateCodingMeasureError::ChoicesWL => {
+                write!(fmt, "\"Choice of measurement basis bitstring has the wrong length\"")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl Format for ConjugateCodingMeasureError {
+    fn format(&self, fmt: Formatter) {
+        match self {
+            ConjugateCodingMeasureError::OutcomesWL => {
+                write!(fmt, "\"Measurement outcomes bitstring has the wrong length\"")
+            }
+            ConjugateCodingMeasureError::ChoicesWL => {
+                write!(fmt, "\"Choice of measurement basis bitstring has the wrong length\"")
+            }
+        }
+    }
 }
 
 impl ConjugateCodingMeasure {
@@ -344,10 +439,10 @@ impl ConjugateCodingMeasure {
         let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
 
         if outcomes.expose_secret().len() != 2*preparation.total_size {
-            error_vec.push(ConjugateCodingMeasureError::OutcomesWrongLength);
+            error_vec.push(ConjugateCodingMeasureError::OutcomesWL);
         }
         if choices.expose_secret().len() != preparation.total_size {
-            error_vec.push(ConjugateCodingMeasureError::ChoicesWrongLength);
+            error_vec.push(ConjugateCodingMeasureError::ChoicesWL);
         }
         if error_vec.len() > 0 {
             return Err(error_vec);
@@ -357,6 +452,15 @@ impl ConjugateCodingMeasure {
             outcomes,
             choices,
         })
+    }
+
+    /// @brief   Creates a struct filled with zero values.
+    ///
+    pub fn new_from_zero() -> ConjugateCodingMeasure {
+        return ConjugateCodingMeasure {
+            outcomes: SecretBox::new(Box::new(vec![0;0])),
+            choices: SecretBox::new(Box::new(vec![0;0])),
+        }
     }
 
     /// @brief   Works as new, but accepts plaintext values and boxes them automatically.
@@ -403,10 +507,29 @@ impl Zeroize for ConjugateCodingResult {
 impl ZeroizeOnDrop for ConjugateCodingResult {}
 
 pub enum ConjugateCodingResultError {
-    // At least one bit in the bitmask did not agree with bits in preparation.security0
-    Security0Fail,
-    // At least one bit in the bitmask did not agree with bits in preparation.security1
-    Security1Fail,
+    VerificationFailed
+}
+
+#[cfg(feature = "std")]
+impl fmt::Debug for ConjugateCodingResultError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConjugateCodingResultError::VerificationFailed => {
+                write!(fmt, "Verification failed. Some security bits were tripped.")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl Format for ConjugateCodingResultError {
+    fn format(&self, fmt: Formatter) {
+        match self {
+            ConjugateCodingResultError::VerificationFailed => {
+                write!(fmt, "Verification failed. Some security bits were tripped.")
+            }
+        }
+    }
 }
 
 impl ConjugateCodingResult {
@@ -450,7 +573,7 @@ impl ConjugateCodingResult {
     pub fn new(
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
-    ) -> Result<ConjugateCodingResult, Vec<ConjugateCodingResultError>>{
+    ) -> Result<ConjugateCodingResult, ConjugateCodingResultError>{
 
         let purged: SecretBox<Vec<u8>> = Self::purge_noise(&preparation, &measurement);
 
@@ -462,8 +585,8 @@ impl ConjugateCodingResult {
                     secret,
                 })
             },
-            Err(error_vec) => {
-                return Err(error_vec);
+            Err(error) => {
+                return Err(error);
             }
         }
     }
@@ -544,13 +667,11 @@ impl ConjugateCodingResult {
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
         purged: &SecretBox<Vec<u8>>
-    )  -> Result<(), Vec<ConjugateCodingResultError>> {
-
-        let mut error_vec: Vec<ConjugateCodingResultError> = Vec::new();
+    )  -> Result<(), ConjugateCodingResultError> {
     
         // We keep the count of how many 1s in the bitmask we encountered so far.
         let mut counter: usize = 0;
-
+        let mut trip_bit = 0;
         for byte in 0..preparation.total_size {
             for bit in 0..8 {
                 // We found a 1 in the bitmask!
@@ -559,13 +680,13 @@ impl ConjugateCodingResult {
                     if !is_nth_bit_set(measurement.choices.expose_secret()[byte], bit) {
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
                             != is_nth_bit_set(preparation.security0.expose_secret()[counter/8],counter%8) {
-                                error_vec.push(ConjugateCodingResultError::Security0Fail);
+                                trip_bit = 1;
                             }
                     // If we measured the 2nd bit, we need to use security1.
                     } else {
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
                             != is_nth_bit_set(preparation.security1.expose_secret()[counter/8],counter%8) {
-                                error_vec.push(ConjugateCodingResultError::Security1Fail);
+                                trip_bit = 1;
                             }                        
                     }
                     counter += 1;
@@ -573,8 +694,7 @@ impl ConjugateCodingResult {
             }
             if counter == 8*preparation.security_size { break }
         }
-
-        if error_vec.len() > 0 { return Err(error_vec) }
+        if trip_bit != 0 { return Err(ConjugateCodingResultError::VerificationFailed) }
         Ok(())
     }
 
