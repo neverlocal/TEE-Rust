@@ -47,11 +47,11 @@ impl ConjugateCodingMeasurePlaintext {
 
 // A state machine implementing the core protocol
 enum StateMachine {
-    FirstDialog,    // Greetings etc.
-    SizeInput,      // User inputs total_size
-    OutcomesInput,  // User inputs outcomes bitstring
-    ChoicesInput,   // User inputs choices bitstring
-    Output,         // Checks are performed, JSON outputted
+    FirstDialog,   // Greetings etc.
+    SizeInput,     // User inputs total_size
+    OutcomesInput, // User inputs outcomes bitstring
+    ChoicesInput,  // User inputs choices bitstring
+    Output,        // Checks are performed, JSON outputted
 }
 
 fn main() {
@@ -96,15 +96,9 @@ fn main() {
                 debug!("[ SizeInput ] String captured. string: {}", parsed);
                 match parsed.parse::<usize>() {
                     Ok(output) => {
-                        debug!(
-                            "[ SizeInput ] String parsed correctly. output: {}",
-                            output
-                        );
+                        debug!("[ SizeInput ] String parsed correctly. output: {}", output);
                         total_size = output;
-                        debug!(
-                            "[ SizeInput ] secret_size assigned value: {}",
-                            total_size
-                        );
+                        debug!("[ SizeInput ] secret_size assigned value: {}", total_size);
                         state_machine = StateMachine::OutcomesInput;
                         debug!("[ SizeInput ] Protocol transitioned to state 'OutcomesInput'.")
                     }
@@ -123,21 +117,21 @@ fn main() {
             StateMachine::OutcomesInput => {
                 println!("--------------------------------------------------");
                 debug!("[ OutcomesInput ] Displaying request for orderings bitstring.");
-                debug!("[ OutcomesInput ] total_size set to {}", 2*total_size);
+                debug!("[ OutcomesInput ] total_size set to {}", 2 * total_size);
                 println!(
                     "Please enter the MEASUREMENT OUTCOME bitstring. You will need\n\
                           to provide {} bytes, in binary form. You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
-                    2*total_size
+                    2 * total_size
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
                 println!("01001110");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
-                while i < (2*total_size) {
+                while i < (2 * total_size) {
                     println!(
                         "OUTCOME bytes already provided (in hex notation): {:x?}",
                         plain_data.outcomes
@@ -218,9 +212,8 @@ fn main() {
             StateMachine::Output => {
                 println!("--------------------------------------------------");
                 debug!("[ Output ] Displaying greeting message.");
-                println!(
-                    "Thank you for having provided all the needed information.");
-                    match plain_data.serialize() {
+                println!("Thank you for having provided all the needed information.");
+                match plain_data.serialize() {
                         Ok(result) => {
                             debug!("Data is valid and has been serialized correctly. It will now be displayed.");
                             println!("Your data has been validated and correctly serialized. Here it is!");
