@@ -4,7 +4,6 @@
 extern crate alloc; // no_std requires a custom allocator
 use core::ptr::addr_of_mut; // Needed to initialize heap
 
-use conjugate_coding::conjugate_coding::ConjugateCodingPrepare;
 // Logging, printing etc.
 use defmt::{debug, error, info, println, trace, warn};
 use esp_backtrace as _;
@@ -25,6 +24,7 @@ use serde_json::Value;
 use serde::{Deserialize, Serialize}; // We do like our JSON very much
 
 use conjugate_coding; // Finally the only meaningful thing in a sea of boilerplate
+use conjugate_coding::conjugate_coding::ConjugateCodingPrepare;
 
 pub use alloc::vec;
 pub use alloc::vec::Vec;

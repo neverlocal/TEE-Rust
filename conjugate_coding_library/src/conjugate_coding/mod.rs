@@ -49,17 +49,13 @@
 //!         security bits, thus returing the final secret string.
 //!
 
-#[cfg(feature = "std")]
-pub use std::*;
+pub extern crate alloc;
+pub use alloc::boxed::Box;
+pub use alloc::vec::Vec;
 
 #[cfg(not(feature = "std"))]
-pub extern crate alloc;
-#[cfg(not(feature = "std"))]
-pub use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
-pub use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 pub use esp_println::println;
+
 #[cfg(not(feature = "std"))]
 pub use core::writeln;
 
@@ -111,13 +107,13 @@ impl ZeroizeOnDrop for ConjugateCodingPrepare {}
 #[derive(Deserialize, Debug)]
 pub enum ConjugateCodingPrepareError {
     // orderings vector has the wrong length
-    OrderingsWL,
+    OrderingsWrongLength,
     // bitmask vector has the wrong length
-    BitmaskWL,
+    BitmaskWrongLength,
     // security0 vector has the wrong length
-    Security0WL,
+    Security0WrongLength,
     // security1 vector has the wrong length
-    Security1WL,
+    Security1WrongLength,
     // bitmask vector is not balanced
     BitmaskUnbalanced,
 }
@@ -196,16 +192,16 @@ impl ConjugateCodingPrepare {
         let mut error_vec: Vec<ConjugateCodingPrepareError> = Vec::new();
 
         if orderings.expose_secret().len() != total_size {
-            error_vec.push(ConjugateCodingPrepareError::OrderingsWL);
+            error_vec.push(ConjugateCodingPrepareError::OrderingsWrongLength);
         }
         if bitmask.expose_secret().len() != total_size {
-            error_vec.push(ConjugateCodingPrepareError::BitmaskWL);
+            error_vec.push(ConjugateCodingPrepareError::BitmaskWrongLength);
         }
         if security0.expose_secret().len() != security_size {
-            error_vec.push(ConjugateCodingPrepareError::Security0WL);
+            error_vec.push(ConjugateCodingPrepareError::Security0WrongLength);
         }
         if security1.expose_secret().len() != security_size {
-            error_vec.push(ConjugateCodingPrepareError::Security1WL);
+            error_vec.push(ConjugateCodingPrepareError::Security1WrongLength);
         }
         if !Self::vector_is_balanced(&bitmask, secret_size, security_size) {
             error_vec.push(ConjugateCodingPrepareError::BitmaskUnbalanced);
@@ -296,9 +292,9 @@ impl ZeroizeOnDrop for ConjugateCodingMeasure {}
 
 pub enum ConjugateCodingMeasureError {
     // outcomes vector has the wrong length
-    OutcomesWL,
+    OutcomesWrongLength,
     // choiches vector has the wrong length
-    ChoicesWL,
+    ChoicesWrongLength,
 }
 
 impl ConjugateCodingMeasure {
@@ -348,10 +344,10 @@ impl ConjugateCodingMeasure {
         let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
 
         if outcomes.expose_secret().len() != 2*preparation.total_size {
-            error_vec.push(ConjugateCodingMeasureError::OutcomesWL);
+            error_vec.push(ConjugateCodingMeasureError::OutcomesWrongLength);
         }
         if choices.expose_secret().len() != preparation.total_size {
-            error_vec.push(ConjugateCodingMeasureError::ChoicesWL);
+            error_vec.push(ConjugateCodingMeasureError::ChoicesWrongLength);
         }
         if error_vec.len() > 0 {
             return Err(error_vec);
