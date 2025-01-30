@@ -1,18 +1,17 @@
 // Logging facilities
 use env_logger;
-use log::{error, debug, warn};
+use log::{debug, error, warn};
 // Easy read from console
 #[macro_use]
 extern crate text_io;
 // Serializatin stuff
-use serde:: { Serialize, Serializer };
 use hex;
+use serde::{Serialize, Serializer};
 // Rewrite memory locations with 0s after drop
 // Useful for security reasons
 use zeroize::{Zeroize, ZeroizeOnDrop};
 // Our library!
 use conjugate_coding::{self, conjugate_coding::ConjugateCodingPrepare};
-
 
 // Data structure holding all the needed params in one place.
 #[derive(Zeroize, ZeroizeOnDrop, Serialize)]
@@ -22,7 +21,7 @@ struct PlainData {
     orderings: Vec<u8>,
     bitmask: Vec<u8>,
     security0: Vec<u8>,
-    security1: Vec<u8>
+    security1: Vec<u8>,
 }
 
 // We serialize vectors as hex strings to save memory in the TEE.
@@ -65,7 +64,6 @@ impl PlainData {
     }
 }
 
-
 // A state machine implementing the core protocol
 enum StateMachine {
     FirstDialog,    // Greetings etc.
@@ -84,16 +82,20 @@ fn main() {
         .format_target(false)
         .format_timestamp(None)
         .init(); // Avoid displaying timestamps in logs
+    debug!("Environment logger set and initialized.");
+
     let mut plain_data = PlainData {
         secret_size: 0,
         security_size: 0,
         orderings: vec![0; 0],
         bitmask: vec![0; 0],
         security0: vec![0; 0],
-        security1: vec![0; 0]
+        security1: vec![0; 0],
     };
+    debug!("plain_data initialized.");
 
     let mut total_size = 0;
+    debug!("total_size initialized.");
 
     let mut state_machine: StateMachine = StateMachine::FirstDialog;
     debug!("Protocol state machine initialized.");
@@ -289,7 +291,7 @@ fn main() {
                       time. Do not use any special characters. Only\n\
                       strings consisting of 0s and 1s, of maximum length\n\
                       8, are allowed.",
-                      plain_data.security_size
+                    plain_data.security_size
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
@@ -338,7 +340,7 @@ fn main() {
                       time. Do not use any special characters. Only\n\
                       strings consisting of 0s and 1s, of maximum length\n\
                       8, are allowed.",
-                      plain_data.security_size
+                    plain_data.security_size
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
@@ -379,7 +381,8 @@ fn main() {
             StateMachine::Output => {
                 println!("--------------------------------------------------");
                 debug!("[ Output ] Displaying greeting message.");
-                println!("
+                println!(
+                    "
                     Thank you for having provided all the needed\n\
                         information. I will need a second to validate it."
                 );
@@ -394,6 +397,7 @@ fn main() {
                     Ok(_) => { // ConjugateCodingPrepare is not serializable, so we discard it
                         match plain_data.serialize() {
                             Ok(result) => {
+                                debug!("Data has been serialized correctly and will now be displayed.");
                                 println!("Your data has been correctly serialized. Here it is!");
                                 println!();
                                 println!("{}",result);
@@ -409,4 +413,8 @@ fn main() {
             }
         }
     }
+    debug!("We are out of the main loop.");
+    plain_data.zeroize();
+    total_size.zeroize();
+    debug!("We zeroized protocol variables just in case. Exiting.");
 }
