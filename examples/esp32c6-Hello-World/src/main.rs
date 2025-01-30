@@ -20,7 +20,6 @@ use esp_hal::{
 };
 
 use core::result::Result;
-use serde_json::Value;
 use serde::{Deserialize, Serialize}; // We do like our JSON very much
 
 use conjugate_coding; // Finally the only meaningful thing in a sea of boilerplate

@@ -382,8 +382,7 @@ fn main() {
                 println!("--------------------------------------------------");
                 debug!("[ Output ] Displaying greeting message.");
                 println!(
-                    "
-                    Thank you for having provided all the needed\n\
+                    "Thank you for having provided all the needed\n\
                         information. I will need a second to validate it."
                 );
                 match ConjugateCodingPrepare::new_plaintext(
@@ -397,8 +396,8 @@ fn main() {
                     Ok(_) => { // ConjugateCodingPrepare is not serializable, so we discard it
                         match plain_data.serialize() {
                             Ok(result) => {
-                                debug!("Data has been serialized correctly and will now be displayed.");
-                                println!("Your data has been correctly serialized. Here it is!");
+                                debug!("Data is valid and has been serialized correctly. It will now be displayed.");
+                                println!("Your data has been validated and correctly serialized. Here it is!");
                                 println!();
                                 println!("{}",result);
                                 println!();
