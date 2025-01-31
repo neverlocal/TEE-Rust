@@ -1,5 +1,5 @@
 [package]
-name = "tee-rust"
+name = "tee-rust-example-esp32c6-tee"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,6 +9,9 @@ defmt = { version = "0.3.10", features = [ "alloc" ] }
 
 # Memory safety
 zeroize = "1.8.1"
+
+# Hashing macros
+nb = "1.1.0"
 
 # Esp dependencies
 esp-alloc = "0.6.0"
@@ -38,4 +41,4 @@ serde_json = { version = "1.0.138", default-features = false, features = ["alloc
 hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde"] }
 
 # Conjugate coding
-conjugate_coding = { path = "../../conjugate_coding_library", default-features = false, features = ["defmt"] }
+conjugate_coding = { path = "../../../conjugate_coding_library", default-features = false, features = ["defmt"] }

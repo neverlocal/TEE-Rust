@@ -11,8 +11,7 @@ use serde::{Serialize, Serializer};
 // Data structure holding all the needed params in one place.
 #[derive(Serialize)]
 struct ConjugateCodingMeasurePlaintext {
-    outcomes: Vec<u8>,
-    choices: Vec<u8>,
+    outcomes: Vec<u8>
 }
 
 // We serialize vectors as hex strings to save memory in the TEE.
@@ -32,29 +31,27 @@ impl ConjugateCodingMeasurePlaintext {
         #[derive(Serialize)]
         struct HexPlainData<'a> {
             #[serde(serialize_with = "serialize_vec_to_hex_string")]
-            outcomes: &'a [u8],
-            #[serde(serialize_with = "serialize_vec_to_hex_string")]
-            choices: &'a [u8],
+            outcomes: &'a [u8]
         }
         // Create a temporary struct with the same data
         let hex_data = HexPlainData {
-            outcomes: &self.outcomes,
-            choices: &self.choices,
+            outcomes: &self.outcomes
         };
         serde_json::to_string(&hex_data)
     }
 }
 
 // A state machine implementing the core protocol
+#[derive(Debug)]
 enum StateMachine {
     FirstDialog,   // Greetings etc.
     SizeInput,     // User inputs total_size
     OutcomesInput, // User inputs outcomes bitstring
-    ChoicesInput,  // User inputs choices bitstring
     Output,        // Checks are performed, JSON outputted
 }
 
 fn main() {
+    use StateMachine::{FirstDialog, SizeInput, OutcomesInput, Output};
     std::env::set_var("RUST_LOG", "info"); // Set the logging level
     env_logger::builder()
         .format_target(false)
@@ -63,21 +60,20 @@ fn main() {
     debug!("Environment logger set and initialized.");
 
     let mut plain_data = ConjugateCodingMeasurePlaintext {
-        outcomes: vec![0; 0],
-        choices: vec![0; 0],
+        outcomes: vec![0; 0]
     };
     debug!("plain_data initialized.");
 
     let mut total_size = 0;
     debug!("total_size initialized.");
 
-    let mut state_machine: StateMachine = StateMachine::FirstDialog;
+    let mut state_machine: StateMachine = FirstDialog;
     debug!("Protocol state machine initialized.");
     loop {
         match state_machine {
-            StateMachine::FirstDialog => {
+            FirstDialog => {
                 println!("==================================================");
-                debug!("[ FirstDialog ] Displaying first greeting.");
+                debug!("[ {:?} ] Displaying first greeting.", FirstDialog);
                 println!("This is TEE-Rust - Measurement serializer utility.");
                 println!("--------------------------------------------------");
                 println!(
@@ -85,39 +81,40 @@ fn main() {
                           relevant measurement data, and print them in a way\n\
                           that the TEE-Rust Esp32c6 example can acquire."
                 );
-                state_machine = StateMachine::SizeInput;
-                debug!("[ FirstDialog ] Protocol transitioned to state 'SizeInput'.");
+                state_machine = SizeInput;
+                debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", FirstDialog);
             }
-            StateMachine::SizeInput => {
+            SizeInput => {
                 println!("--------------------------------------------------");
-                debug!("[ SizeInput ] Displaying request for total number of bytes.");
+                debug!("[ {:?} ] Displaying request for total number of bytes.", SizeInput);
                 println!("Enter the total number of classical bytes to recover:");
                 let parsed: String = read!("{}\n");
-                debug!("[ SizeInput ] String captured. string: {}", parsed);
+                debug!("[ {:?} ] String captured. string: {}", SizeInput, parsed);
                 match parsed.parse::<usize>() {
                     Ok(output) => {
-                        debug!("[ SizeInput ] String parsed correctly. output: {}", output);
+                        debug!("[ {:?} ] String parsed correctly. output: {}", SizeInput, output);
                         total_size = output;
-                        debug!("[ SizeInput ] secret_size assigned value: {}", total_size);
-                        state_machine = StateMachine::OutcomesInput;
-                        debug!("[ SizeInput ] Protocol transitioned to state 'OutcomesInput'.")
+                        debug!("[ {:?} ] secret_size assigned value: {}", SizeInput, total_size);
+                        state_machine = OutcomesInput;
+                        debug!("[ {:?} ] Protocol transitioned to state 'OutcomesInput'.", SizeInput)
                     }
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
-                        debug!("[ SizeInput ] String parsed incorrectly. Error: {}", e);
+                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SizeInput, e);
                         total_size = 0;
                         debug!(
-                            "[ SizeInput ] secret_size wiped. secret_size: {}",
+                            "[ {:?} ] secret_size wiped. secret_size: {}",
+                            SizeInput,
                             total_size
                         );
-                        debug!("[ SizeInput ] Protocol transitioned to state 'SizeInput'.");
+                        debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", SizeInput);
                     }
                 }
             }
-            StateMachine::OutcomesInput => {
+            OutcomesInput => {
                 println!("--------------------------------------------------");
-                debug!("[ OutcomesInput ] Displaying request for orderings bitstring.");
-                debug!("[ OutcomesInput ] total_size set to {}", 2 * total_size);
+                debug!("[ {:?} ] Displaying request for orderings bitstring.", OutcomesInput);
+                debug!("[ {:?} ] total_size set to {}", OutcomesInput, 2 * total_size);
                 println!(
                     "Please enter the MEASUREMENT OUTCOME bitstring. You will need\n\
                           to provide {} bytes, in binary form. You will be\n\
@@ -138,80 +135,34 @@ fn main() {
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ OutcomesInput ] String captured. string: {}", parsed);
+                    debug!("[ {:?} ] String captured. string: {}", OutcomesInput, parsed);
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
                         match u8::from_str_radix(&parsed, 2) {
                             Err(e) => {
                                 error!("Not a valid bitstring! Try again!");
-                                debug!("[ OutcomesInput ] Error: {}", e);
+                                debug!("[ {:?} ] Error: {}", OutcomesInput, e);
                             }
                             Ok(result) => {
                                 plain_data.outcomes.push(result);
-                                debug!("[ OutcomesInput ] New valued pushed.: {}", result);
+                                debug!("[ {:?} ] New valued pushed.: {}", OutcomesInput, result);
                                 i += 1;
                             }
                         }
                     }
                 }
                 debug!(
-                    "[ OutcomesInput ] Exited while loop. orderings: {:x?}",
+                    "[ {:?} ] Exited while loop. orderings: {:x?}",
+                    OutcomesInput,
                     plain_data.outcomes
                 );
-                state_machine = StateMachine::ChoicesInput;
-                debug!("[ OutcomesInput ] Protocol transitioned to state 'ChoicesInput'.");
+                state_machine = Output;
+                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", OutcomesInput);
             }
-            StateMachine::ChoicesInput => {
+            Output => {
                 println!("--------------------------------------------------");
-                debug!("[ ChoicesInput ] Displaying request for bitmask bitstring.");
-                println!(
-                    "Please enter the CHOICES bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
-                          asked for one byte at a time. Do not use any special\n\
-                          characters. Only strings consisting of 0s and 1s, of\n\
-                          maximum length 8, are allowed.",
-                    total_size
-                );
-                println!("EXAMPLE:");
-                println!("Please provide byte 0:");
-                println!("01001110");
-                println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
-                let mut i = 0;
-                while i < total_size {
-                    println!(
-                        "CHOICES bytes already provided (in hex notation): {:x?}",
-                        plain_data.choices
-                    );
-                    println!("Please provide byte {}:", i);
-                    let parsed: String = read!("{}\n");
-                    debug!("[ ChoicesInput ] String captured. string: {}", parsed);
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ ChoicesInput ] Error: {}", e);
-                            }
-                            Ok(result) => {
-                                plain_data.choices.push(result);
-                                debug!("[ ChoicesInput ] New valued pushed.: {}", result);
-                                i += 1;
-                            }
-                        }
-                    }
-                }
-                debug!(
-                    "[ ChoicesInput ] Exited while loop. bitmask: {:x?}",
-                    plain_data.choices
-                );
-                state_machine = StateMachine::Output;
-                debug!("[ ChoicesInput ] Protocol transitioned to state 'Output'.");
-            }
-            StateMachine::Output => {
-                println!("--------------------------------------------------");
-                debug!("[ Output ] Displaying greeting message.");
+                debug!("[ {:?} ] Displaying greeting message.", Output);
                 println!("Thank you for having provided all the needed information.");
                 match plain_data.serialize() {
                         Ok(result) => {

@@ -1,5 +1,5 @@
 [package]
-name = "preparation_serializer"
+name = "measurement_serializer"
 version = "0.1.0"
 edition = "2021"
 
@@ -22,4 +22,4 @@ serde_json = { version = "1.0.138"}
 hex = "0.4"
 
 # Conjugate coding
-conjugate_coding = { path = "../../conjugate_coding_library", features = [ "std" ] }
+conjugate_coding = { path = "../../../conjugate_coding_library", features = [ "std" ] }

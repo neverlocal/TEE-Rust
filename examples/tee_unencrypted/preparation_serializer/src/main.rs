@@ -4,7 +4,7 @@ use log::{debug, error, warn};
 // Easy read from console
 #[macro_use]
 extern crate text_io;
-// Serializatin stuff
+// Serialization stuff
 use hex;
 use serde::{Serialize, Serializer};
 // Rewrite memory locations with 0s after drop, useful for security reasons
@@ -15,10 +15,8 @@ use conjugate_coding::{self, conjugate_coding::ConjugateCodingPrepare};
 // Data structure holding all the needed params in one place.
 #[derive(Zeroize, ZeroizeOnDrop, Serialize)]
 struct ConjugateCodingPreparePlaintext {
-    secret_size: usize,
     security_size: usize,
     orderings: Vec<u8>,
-    bitmask: Vec<u8>,
     security0: Vec<u8>,
     security1: Vec<u8>,
 }
@@ -39,12 +37,9 @@ impl ConjugateCodingPreparePlaintext {
         // Use #[serde(serialize_with = "...")] to apply the custom serializer
         #[derive(Serialize)]
         struct HexPlainData<'a> {
-            secret_size: usize,
             security_size: usize,
             #[serde(serialize_with = "serialize_vec_to_hex_string")]
             orderings: &'a [u8],
-            #[serde(serialize_with = "serialize_vec_to_hex_string")]
-            bitmask: &'a [u8],
             #[serde(serialize_with = "serialize_vec_to_hex_string")]
             security0: &'a [u8],
             #[serde(serialize_with = "serialize_vec_to_hex_string")]
@@ -52,10 +47,8 @@ impl ConjugateCodingPreparePlaintext {
         }
         // Create a temporary struct with the same data
         let hex_data = HexPlainData {
-            secret_size: self.secret_size,
             security_size: self.security_size,
             orderings: &self.orderings,
-            bitmask: &self.bitmask,
             security0: &self.security0,
             security1: &self.security1,
         };
@@ -64,18 +57,18 @@ impl ConjugateCodingPreparePlaintext {
 }
 
 // A state machine implementing the core protocol
+#[derive(Debug)]
 enum StateMachine {
     FirstDialog,    // Greetings etc.
-    SecretInput,    // User inputs secret_size
     SecurityInput,  // User inputs security_size
     OrderingsInput, // User inputs orderings bitstring
-    BitmaskInput,   // User inputs bitmask bitstring
     Security0Input, // User inputs security0 bitstring
     Security1Input, // User inputs security1 bitstring
     Output,         // Checks are performed, JSON outputted
 }
 
 fn main() {
+    use StateMachine::{FirstDialog, SecurityInput, OrderingsInput, Security0Input, Security1Input, Output};
     std::env::set_var("RUST_LOG", "info"); // Set the logging level
     env_logger::builder()
         .format_target(false)
@@ -84,25 +77,20 @@ fn main() {
     debug!("Environment logger set and initialized.");
 
     let mut plain_data = ConjugateCodingPreparePlaintext {
-        secret_size: 0,
         security_size: 0,
         orderings: vec![0; 0],
-        bitmask: vec![0; 0],
         security0: vec![0; 0],
         security1: vec![0; 0],
     };
     debug!("plain_data initialized.");
 
-    let mut total_size = 0;
-    debug!("total_size initialized.");
-
-    let mut state_machine: StateMachine = StateMachine::FirstDialog;
+    let mut state_machine: StateMachine = FirstDialog;
     debug!("Protocol state machine initialized.");
     loop {
         match state_machine {
-            StateMachine::FirstDialog => {
+            FirstDialog => {
                 println!("==================================================");
-                debug!("[ FirstDialog ] Displaying first greeting.");
+                debug!("[ {:?} ] Displaying first greeting.", FirstDialog);
                 println!("This is TEE-Rust - Preparation serializer utility.");
                 println!("--------------------------------------------------");
                 println!(
@@ -116,48 +104,27 @@ fn main() {
                        insecure, and useful only for educational\n    \
                        purposes. Use at your own risk!"
                 );
-                state_machine = StateMachine::SecretInput;
-                debug!("[ FirstDialog ] Protocol transitioned to state 'SecretInput'.");
+                state_machine = SecurityInput;
+                debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", FirstDialog);
             }
-            StateMachine::SecretInput => {
+            SecurityInput => {
                 println!("--------------------------------------------------");
-                debug!("[ SecretInput ] Displaying request for secret bytes.");
-                println!("Enter the number of secret bytes:");
-                let parsed: String = read!("{}\n");
-                debug!("[ SecretInput ] String captured. string: {}", parsed);
-                match parsed.parse::<usize>() {
-                    Ok(output) => {
-                        debug!(
-                            "[ SecretInput ] String parsed correctly. output: {}",
-                            output
-                        );
-                        plain_data.secret_size = output;
-                        debug!(
-                            "[ SecretInput ] secret_size assigned value: {}",
-                            plain_data.secret_size
-                        );
-                        state_machine = StateMachine::SecurityInput;
-                        debug!("[ SecretInput ] Protocol transitioned to state 'SecurityInput'.")
-                    }
-                    Err(e) => {
-                        error!("Input is not a positive number! Please try again.");
-                        debug!("[ SecretInput ] String parsed incorrectly. Error: {}", e);
-                        plain_data.secret_size = 0;
-                        debug!(
-                            "[ SecretInput ] secret_size wiped. secret_size: {}",
-                            plain_data.secret_size
-                        );
-                        debug!("[ SecretInput ] Protocol transitioned to state 'SecretInput'.");
-                    }
-                }
-            }
-            StateMachine::SecurityInput => {
-                println!("--------------------------------------------------");
-                debug!("[ SecurityInput ] Displaying request for security bytes.");
+                debug!("[ {:?} ] Displaying request for security bytes.", SecurityInput);
                 println!("Enter the number of security bytes:");
                 let parsed: String = read!("{}\n");
-                debug!("[ SecurityInput ] String captured. string: {}", parsed);
+                debug!("[ {:?} ] String captured. string: {}", SecurityInput, parsed);
                 match parsed.parse::<usize>() {
+                    Err(e) => {
+                        error!("Input is not a positive number! Please try again.");
+                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SecurityInput, e);
+                        plain_data.security_size = 0;
+                        debug!(
+                            "[ {:?} ] security_size wiped. security_size: {}",
+                            SecurityInput,
+                            plain_data.security_size
+                        );
+                        debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", SecurityInput);
+                    }
                     Ok(output) => {
                         debug!(
                             "[ SecurityInput ] String parsed correctly. output: {}",
@@ -165,129 +132,72 @@ fn main() {
                         );
                         plain_data.security_size = output;
                         debug!(
-                            "[ SecurityInput ] security_size assigned value: {}",
+                            "[ {:?} ] security_size assigned value: {}",
+                            SecurityInput,
                             plain_data.security_size
                         );
-                        state_machine = StateMachine::OrderingsInput;
-                        debug!("[ SecurityInput ] Protocol transitioned to state 'OrderingsInput'.")
-                    }
-                    Err(e) => {
-                        error!("Input is not a positive number! Please try again.");
-                        debug!("[ SecurityInput ] String parsed incorrectly. Error: {}", e);
-                        plain_data.security_size = 0;
-                        debug!(
-                            "[ SecurityInput ] security_size wiped. security_size: {}",
-                            plain_data.security_size
-                        );
-                        debug!("[ SecurityInput ] Protocol transitioned to state 'SecurityInput'.");
+                        state_machine = OrderingsInput;
+                        debug!("[ {:?} ] Protocol transitioned to state 'OrderingsInput'.", SecurityInput)
                     }
                 }
             }
-            StateMachine::OrderingsInput => {
+            OrderingsInput => {
                 println!("--------------------------------------------------");
-                debug!("[ OrderingsInput ] Displaying request for orderings bitstring.");
-                total_size = plain_data.secret_size + plain_data.security_size;
-                debug!("[ OrderingsInput ] total_size set to {}", total_size);
+                debug!("[ {:?} ] Displaying request for orderings bitstring.", OrderingsInput);
                 println!(
                     "Please enter the ORDERINGS bitstring. You will need\n\
                           to provide {} bytes, in binary form. You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
-                    total_size
+                    plain_data.security_size
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
                 println!("01001110");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
-                while i < total_size {
+                while i < plain_data.security_size {
                     println!(
                         "ORDERINGS bytes already provided (in hex notation): {:x?}",
                         plain_data.orderings
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ OrderingsInput ] String captured. string: {}", parsed);
+                    debug!("[ {:?} ] String captured. string: {}", OrderingsInput, parsed);
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
                         match u8::from_str_radix(&parsed, 2) {
                             Err(e) => {
                                 error!("Not a valid bitstring! Try again!");
-                                debug!("[ OrderingsInput ] Error: {}", e);
+                                debug!("[ {:?} ] Error: {}", OrderingsInput, e);
                             }
                             Ok(result) => {
                                 plain_data.orderings.push(result);
-                                debug!("[ OrderingsInput ] New valued pushed.: {}", result);
+                                debug!("[ {:?} ] New valued pushed.: {}", OrderingsInput, result);
                                 i += 1;
                             }
                         }
                     }
                 }
                 debug!(
-                    "[ OrderingsInput ] Exited while loop. orderings: {:x?}",
+                    "[ {:?} ] Exited while loop. orderings: {:x?}",
+                    OrderingsInput,
                     plain_data.orderings
                 );
-                state_machine = StateMachine::BitmaskInput;
-                debug!("[ OrderingsInput ] Protocol transitioned to state 'BitmaskInput'.");
+                state_machine = Security0Input;
+                debug!("[ {:?} ] Protocol transitioned to state 'Security0Input'.", OrderingsInput);
             }
-            StateMachine::BitmaskInput => {
-                println!("--------------------------------------------------");
-                debug!("[ BitmaskInput ] Displaying request for bitmask bitstring.");
-                println!(
-                    "Please enter the BITMASK bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
-                          asked for one byte at a time. Do not use any special\n\
-                          characters. Only strings consisting of 0s and 1s, of\n\
-                          maximum length 8, are allowed.",
-                    total_size
-                );
-                println!("EXAMPLE:");
-                println!("Please provide byte 0:");
-                println!("01001110");
-                println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
-                let mut i = 0;
-                while i < total_size {
-                    println!(
-                        "BITMASK bytes already provided (in hex notation): {:x?}",
-                        plain_data.bitmask
-                    );
-                    println!("Please provide byte {}:", i);
-                    let parsed: String = read!("{}\n");
-                    debug!("[ BitmaskInput ] String captured. string: {}", parsed);
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ BitmaskInput ] Error: {}", e);
-                            }
-                            Ok(result) => {
-                                plain_data.bitmask.push(result);
-                                debug!("[ BitmaskInput ] New valued pushed.: {}", result);
-                                i += 1;
-                            }
-                        }
-                    }
-                }
-                debug!(
-                    "[ BitmaskInput ] Exited while loop. bitmask: {:x?}",
-                    plain_data.bitmask
-                );
-                state_machine = StateMachine::Security0Input;
-                debug!("[ BitmaskInput ] Protocol transitioned to state 'Security0Input'.");
-            }
-            StateMachine::Security0Input => {
-                debug!("[ Security0Input ] Checking size of security_size");
+            Security0Input => {
+                debug!("[ {:?} ] Checking size of security_size", Security0Input);
                 if plain_data.security_size == 0 {
-                    state_machine = StateMachine::Output;
-                        debug!("[ Security0Input ] security_size is 0. Protocol transitioned to state 'Output'.");
+                    state_machine = Output;
+                        debug!("[ {:?} ] security_size is 0. Protocol transitioned to state 'Output'.", Security0Input);
                 } else {
-                    debug!("[ Security0Input ] security_size is bigger than 0.");
+                    debug!("[ {:?} ] security_size is bigger than 0.", Security0Input);
                     println!("--------------------------------------------------");
-                    debug!("[ Security0Input ] Displaying request for security0 bitstring.");
+                    debug!("[ {:?} ] Displaying request for security0 bitstring.", Security0Input);
                     println!(
                         "Please enter the SECURITY0 bitstring. This is the\n\
                         bitstring of security parameters when the measured\n\
@@ -310,34 +220,35 @@ fn main() {
                         );
                         println!("Please provide byte {}:", i);
                         let parsed: String = read!("{}\n");
-                        debug!("[ Security0Input ] String captured. string: {}", parsed);
+                        debug!("[ {:?} ] String captured. string: {}", Security0Input, parsed);
                         if parsed.len() > 8 {
                             error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                         } else {
                             match u8::from_str_radix(&parsed, 2) {
                                 Err(e) => {
                                     error!("Not a valid bitstring! Try again!");
-                                    debug!("[ Security0Input ] Error: {}", e);
+                                    debug!("[ {:?} ] Error: {}", Security0Input, e);
                                 }
                                 Ok(result) => {
                                     plain_data.security0.push(result);
-                                    debug!("[ Security0Input ] New valued pushed.: {}", result);
+                                    debug!("[ {:?} ] New valued pushed.: {}", Security0Input, result);
                                     i += 1;
                                 }
                             }
                         }
                     }
                     debug!(
-                        "[ Security0Input ] Exited while loop. security0: {:x?}",
+                        "[ {:?} ] Exited while loop. security0: {:x?}",
+                        Security0Input,
                         plain_data.security0
                     );
-                    state_machine = StateMachine::Security1Input;
-                    debug!("[ Security0Input ] Protocol transitioned to state 'Security1Input'.");
+                    state_machine = Security1Input;
+                    debug!("[ {:?} ] Protocol transitioned to state 'Security1Input'.", Security0Input);
                 }
             }
-            StateMachine::Security1Input => {
+            Security1Input => {
                 println!("--------------------------------------------------");
-                debug!("[ Security1Input ] Displaying request for security1 bitstring.");
+                debug!("[ {:?} ] Displaying request for security1 bitstring.", Security1Input);
                 println!(
                     "Please enter the SECURITY1 bitstring. This is the\n\
                       bitstring of security parameters when the measured\n\
@@ -360,42 +271,43 @@ fn main() {
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ Security1Input ] String captured. string: {}", parsed);
+                    debug!("[ {:?} ] String captured. string: {}", Security1Input, parsed);
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
                         match u8::from_str_radix(&parsed, 2) {
                             Err(e) => {
                                 error!("Not a valid bitstring! Try again!");
-                                debug!("[ Security1Input ] Error: {}", e);
+                                debug!("[ {:?} ] Error: {}", Security1Input, e);
                             }
                             Ok(result) => {
                                 plain_data.security1.push(result);
-                                debug!("[ Security1Input ] New valued pushed.: {}", result);
+                                debug!("[ {:?} ] New valued pushed.: {}", Security1Input, result);
                                 i += 1;
                             }
                         }
                     }
                 }
                 debug!(
-                    "[ Security1Input ] Exited while loop. security1: {:x?}",
+                    "[ {:?} ] Exited while loop. security1: {:x?}",
+                    Security1Input,
                     plain_data.security1
                 );
-                state_machine = StateMachine::Output;
-                debug!("[ Security1Input ] Protocol transitioned to state 'Output'.");
+                state_machine = Output;
+                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", Security1Input);
             }
-            StateMachine::Output => {
+            Output => {
                 println!("--------------------------------------------------");
-                debug!("[ Output ] Displaying greeting message.");
+                debug!("[ {:?} ] Displaying greeting message.", Output);
                 println!(
                     "Thank you for having provided all the needed\n\
                         information. I will need a second to validate it."
                 );
                 match ConjugateCodingPrepare::new_plaintext(
-                    plain_data.secret_size,
+                    0,
                     plain_data.security_size,
                     plain_data.orderings.clone(),
-                    plain_data.bitmask.clone(),
+                    vec![255;plain_data.security_size], //Bitmask is all 1 in this particular application!
                     plain_data.security0.clone(),
                     plain_data.security1.clone()
                 ) {
@@ -420,6 +332,5 @@ fn main() {
     }
     debug!("We are out of the main loop.");
     plain_data.zeroize();
-    total_size.zeroize();
     debug!("We zeroized protocol variables just in case. Exiting.");
 }

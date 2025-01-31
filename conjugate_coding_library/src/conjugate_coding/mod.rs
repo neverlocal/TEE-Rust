@@ -85,7 +85,7 @@ pub struct ConjugateCodingPrepare {
     /// Size in bytes of the security bits. Normally 32;
     security_size: usize,
     /// secret_size + security_size. Normally 64;
-    total_size:    usize,
+    pub total_size:    usize,
     /// For each couple of qubits in conjugate coding, which qubit encodes which bit. For each bit, 0 means '1st qbit encodes 1st bit'. Length of the array equals total_size;
     orderings:     SecretBox<Vec<u8>>,
     /// The bit mask array, which says which bits of purged_outcomes are used for security. Length equals total_size. Must contain precisely security_size 1s and secret_size 0s;
@@ -609,9 +609,9 @@ impl ConjugateCodingResult {
     ) -> SecretBox<Vec<u8>> {
         let mut purged:Vec<u8> = Vec::new();
         for byte in 0..preparation.total_size {
+            let mut mask: u8 = 0;
             let xor = measurement.choices.expose_secret()[byte] ^ preparation.orderings.expose_secret()[byte];
             for bit in 0..8 {
-                let mut mask: u8 = 0;
                 // Case 0: we keep the 1st bit and discard the 2nd.
                 if is_nth_bit_set(xor,bit) == false {
                     // j = 0 -> meas_outcomes[2i],   0th bit
@@ -623,7 +623,7 @@ impl ConjugateCodingResult {
                     // j = 6 -> meas_outcomes[2i+1], 4th bit
                     // j = 7 -> meas_outcomes[2i+1], 6th bit
                     if is_nth_bit_set(measurement.outcomes.expose_secret()[2*byte + (bit/4)],(2*bit)%8) {
-                        mask = 1 << (7-bit);
+                        mask += 1 << (7-bit);
                     }
                 // Case 1: we keep the 2nd bit and discard the 1st.
                 } else {
@@ -636,11 +636,11 @@ impl ConjugateCodingResult {
                     // j = 6 -> meas_outcomes[2i+1], 5th bit
                     // j = 7 -> meas_outcomes[2i+1], 7th bit
                     if is_nth_bit_set(measurement.outcomes.expose_secret()[2*byte + (bit/4)],((2*bit)%8)+1) {
-                        mask = 1 << (7-bit);
+                        mask += 1 << (7-bit);
                     }
                 }
-                purged.push(mask);
             }
+            purged.push(mask);
         }
         return SecretBox::new(Box::new(purged));    
     }

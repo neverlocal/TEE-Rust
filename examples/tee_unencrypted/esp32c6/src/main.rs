@@ -2,7 +2,7 @@
 #![no_main]
 
 extern crate alloc; // no_std requires a custom allocator
-                    //use alloc::vec; // Needed for buffer manipulation
+use alloc::vec;
 use alloc::vec::Vec; // Needed for buffer manipulation
 
 use alloc::string::String;
@@ -19,13 +19,16 @@ use esp_println as _;
 use esp_hal::{
     // aes::Aes,        // AES ecnryption-decryption scheme
     // aes::Mode,       // AES mode (128, 256, etc)
-    clock::CpuClock, // Set the CPU clock
+    clock::CpuClock,
     main,
-    time::Duration,          // Needed to reset the watchdog and for setting delays
-    timer::timg::MwdtStage,  // Needed to reset the watchdog
-    timer::timg::TimerGroup, // Needed to reset the watchdog
+    peripherals::TIMG0,
+    sha::{Sha, Sha256},
+    time::Duration,
+    timer::timg::{MwdtStage, TimerGroup, Wdt},
     usb_serial_jtag::UsbSerialJtag, // Needed to communicate over USB
 };
+
+use nb::block;
 
 // Rewrite memory locations with 0s after drop, useful for security reasons
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -50,6 +53,21 @@ fn init_heap() {
             esp_alloc::MemoryCapability::Internal.into(),
         ));
     }
+}
+
+///////////////////
+// State Machine //
+///////////////////
+#[derive(Format)]
+enum StateMachine {
+    PreparationDialog, // User is asked to provide preparation data.
+    PreparationInput,  // Preparation data is provided.
+    ProgramDialog,     // User is asked to provide program input.
+    ProgramInput,      // Input data is provided.
+    MeasurementDialog, // User is asked to provide measurement data.
+    MeasurementInput,  // Measurement data is provided.
+    ComputeSecret,     // The actual security protocol is run.
+    RunProgram,        // The program is unlocked and ran.
 }
 
 #[main]
@@ -86,7 +104,7 @@ fn main() -> ! {
     info!("Watchdog timer created.");
     let mut wdt = timg0.wdt; // Use it to create a new watchdog
     info!("Watchdog created");
-    let timeout_seconds = 600;
+    let timeout_seconds = 300;
     wdt.set_timeout(MwdtStage::Stage0, Duration::secs(timeout_seconds)); // Watchdog triggers after n secs of inactivity
     info!("Timeout set to {} seconds.", timeout_seconds);
     wdt.enable(); // We enable the damn thing
@@ -100,20 +118,11 @@ fn main() -> ! {
     let mut buffer: Vec<u8> = alloc::vec![0;0];
     info!("Consol buffer initialized.");
 
-    ///////////////////
-    // State Machine //
-    ///////////////////
-    enum StateMachine {
-        PreparationDialog, // Greetings etc.
-        PreparationInput,  //
-        MeasurementDialog, //
-        MeasurementInput,  //
-        ComputeSecret,     //
-        RunProgram,        //
-        FinalDialog,       //
-    }
-    let mut state_machine: StateMachine = StateMachine::PreparationDialog;
-    info!("Protocol state machine initialized.");
+    //////////////////
+    // CRYPTOGRAPHY //
+    //////////////////
+    let mut sha = Sha::new(peripherals.SHA);
+    let mut hasher = sha.start::<Sha256>();
 
     //////////////////////////////
     // Conjugate Coding Helpers //
@@ -128,10 +137,8 @@ fn main() -> ! {
     }
     #[derive(Zeroize, ZeroizeOnDrop, Deserialize, Format)]
     pub struct ConjugateCodingPreparePlaintext {
-        secret_size: usize,
         security_size: usize,
         orderings: Vec<u8>,
-        bitmask: Vec<u8>,
         security0: Vec<u8>,
         security1: Vec<u8>,
     }
@@ -140,12 +147,9 @@ fn main() -> ! {
         fn deserialize(json_vec: &[u8]) -> Result<Self, serde_json::Error> {
             #[derive(Deserialize)]
             struct HexPlainData {
-                secret_size: usize,
                 security_size: usize,
                 #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
                 orderings: Vec<u8>,
-                #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-                bitmask: Vec<u8>,
                 #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
                 security0: Vec<u8>,
                 #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
@@ -155,10 +159,8 @@ fn main() -> ! {
             let hex_data: HexPlainData = serde_json::from_slice(json_vec)?;
 
             Ok(ConjugateCodingPreparePlaintext {
-                secret_size: hex_data.secret_size,
                 security_size: hex_data.security_size,
                 orderings: hex_data.orderings,
-                bitmask: hex_data.bitmask,
                 security0: hex_data.security0,
                 security1: hex_data.security1,
             })
@@ -167,28 +169,21 @@ fn main() -> ! {
 
     #[derive(Zeroize, ZeroizeOnDrop, Deserialize, Format)]
     pub struct ConjugateCodingMeasurePlaintext {
-        total_size: usize,
-        outcomes: Vec<u8>,
-        choices: Vec<u8>,
+        outcomes: Vec<u8>
     }
 
     impl ConjugateCodingMeasurePlaintext {
         fn deserialize(json_vec: &[u8]) -> Result<Self, serde_json::Error> {
             #[derive(Deserialize)]
             struct HexPlainData {
-                total_size: usize,
                 #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-                outcomes: Vec<u8>,
-                #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-                choices: Vec<u8>,
+                outcomes: Vec<u8>
             }
 
             let hex_data: HexPlainData = serde_json::from_slice(json_vec)?;
 
             Ok(ConjugateCodingMeasurePlaintext {
-                total_size: hex_data.total_size,
-                outcomes: hex_data.outcomes,
-                choices: hex_data.choices,
+                outcomes: hex_data.outcomes
             })
         }
     }
@@ -196,14 +191,29 @@ fn main() -> ! {
     let mut preparation = ConjugateCodingPrepare::new_from_zero();
     let mut measurement = ConjugateCodingMeasure::new_from_zero();
 
+    ///////////////////
+    // STATE MACHINE //
+    ///////////////////
+    use crate::StateMachine::{
+        ComputeSecret, MeasurementDialog, MeasurementInput, PreparationDialog, PreparationInput,
+        ProgramDialog, ProgramInput, RunProgram,
+    };
+    let mut state_machine = PreparationDialog;
+    info!("Protocol state machine initialized.");
+
+    ///////////////////
+    // TEE VARIABLES //
+    ///////////////////
+    let mut program_input: Vec<u8> = vec![0; 0];
+    let mut program_hash: Vec<u8> = vec![0; 0];
+
     ///////////////
     // MAIN LOOP //
     ///////////////
     info!("Entering main loop...");
     loop {
         match state_machine {
-            StateMachine::PreparationDialog => {
-                debug!("[ PreparationDialog ] Protocol is in state 'PreparationDialog'.");
+            PreparationDialog => {
                 println!("This is TEE-Rust.");
                 println!("[ PREPARATION ] The protocol is in preparation phase.");
                 println!(
@@ -215,70 +225,137 @@ fn main() -> ! {
                 );
                 println!("[ PREPARATION ] Press CTRL+D (UTF8 0004, EOT) to submit information.");
                 println!("");
-                wdt.feed();
-                debug!("[ PreparationDialog ] Watchdog fed.");
-                state_machine = StateMachine::PreparationInput;
-                debug!("[ PreparationDialog ] Protocol transitioned to state 'PreparationInput'.");
+                wdt = watchdog_feed(wdt, PreparationDialog);
+                state_machine = PreparationInput;
+                dbg_state_transition(PreparationDialog, PreparationInput);
             }
-            StateMachine::PreparationInput => {
+            PreparationInput => {
                 let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
                 if (buffer.len() > 0) && buffer[buffer.len() - 1] == 04 {
                     println!("");
                     println!("[ PREPARATION ] Information submitted. Validating...");
-                    debug!("[ PreparationInput ] Buffer: {=[u8]:x}", buffer);
+                    debug!("[ {:?} ] Buffer: {=[u8]:x}", PreparationInput, buffer);
                     buffer.pop();
                     debug!(
-                        "[ PreparationInput ] Got rid of EOT char. New buffer: {=[u8]:x}",
-                        buffer
+                        "[ {:?} ] Got rid of EOT char. New buffer: {=[u8]:x}",
+                        PreparationInput, buffer
                     );
                     match ConjugateCodingPreparePlaintext::deserialize(&buffer) {
                         Err(_) => {
                             error!("[ PREPARATION ] Protocol wasn't able to parse the string. Restarting protocol...");
                             buffer.zeroize();
-                            debug!("[ PreparationInput ] Buffer has been zeroized: New buffer: {=[u8]:x}", buffer);
-                            state_machine = StateMachine::PreparationDialog;
-                            debug!("[ PreparationInput ] Protocol transitioned to state 'PreparationDialog'.");
+                            debug!(
+                                "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
+                                PreparationInput, buffer
+                            );
+                            state_machine = PreparationDialog;
+                            dbg_state_transition(PreparationInput, PreparationDialog);
                         }
                         Ok(deserialized_buffer) => {
                             println!("[ PREPARATION ] JSON input is of the right format. Validating information...");
                             debug!(
-                                "[ PreparationInput ] deserialized_buffer: {:?}",
-                                deserialized_buffer
+                                "[ {:?} ] deserialized_buffer: {:?}",
+                                PreparationInput, deserialized_buffer
                             );
                             buffer.zeroize();
-                            debug!("[ PreparationInput ] Buffer has been zeroized: New buffer: {=[u8]:x}", buffer);
+                            debug!(
+                                "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
+                                PreparationInput, buffer
+                            );
+                            debug!(
+                                "[ {:?} ] checking that the preparation provides 0 secret bits",
+                                PreparationInput
+                            );
                             match ConjugateCodingPrepare::new_plaintext(
-                                deserialized_buffer.secret_size,
+                                0,
                                 deserialized_buffer.security_size,
                                 deserialized_buffer.orderings.clone(),
-                                deserialized_buffer.bitmask.clone(),
+                                vec![255; deserialized_buffer.security_size], //Bitmask is all 1 in this application!
                                 deserialized_buffer.security0.clone(),
                                 deserialized_buffer.security1.clone(),
                             ) {
-                                Ok(result) => {
-                                    println!("[ PREPARATION ] Information validated.");
-                                    preparation = result;
-                                    debug!("[ PreparationInput ] Preparation struct assigned.");
-                                    state_machine = StateMachine::MeasurementDialog;
-                                    debug!("[ PreparationInput ] Protocol transitioning to state 'PreparationAssign'.");
-                                }
                                 Err(e) => {
                                     error!("[ PREPARATION ] Information validation failed with error:\n      \
                                             {:?}. \
                                             Restarting protocol...", e);
-                                    state_machine = StateMachine::PreparationDialog;
-                                    debug!("[ PreparationInput ] Protocol transitioned to state 'PreparationDialog'.");
+                                    state_machine = ProgramDialog;
+                                    dbg_state_transition(PreparationInput, ProgramDialog);
+                                }
+                                Ok(result) => {
+                                    println!("[ PREPARATION ] Information validated.");
+                                    preparation = result;
+                                    debug!(
+                                        "[ {:?} ] Preparation struct assigned.",
+                                        PreparationInput
+                                    );
+                                    state_machine = ProgramDialog;
+                                    dbg_state_transition(PreparationInput, ProgramDialog);
                                 }
                             }
                         }
                     };
+                    wdt = watchdog_feed(wdt, PreparationInput);
                 }
-                wdt.feed();
-                debug!("[ PreparationInput ] Watchdog fed.");
             }
-            StateMachine::MeasurementDialog => {
-                debug!("[ MeasurementDialog ] Protocol is in state 'MeasurementDialog'.");
-                println!("This is TEE-Rust.");
+            ProgramDialog => {
+                println!("[ PROGRAM INPUT ] Please, provide the input to your program.");
+                println!("[ PROGRAM INPUT ] Backspace works normally.");
+                println!(
+                    "[ PROGRAM INPUT ] ENTER is not send. You can press ENTER to go to a new line."
+                );
+                println!("[ PROGRAM INPUT ] Press CTRL+D (UTF8 0004, EOT) to submit information.");
+                println!("");
+                wdt = watchdog_feed(wdt, ProgramDialog);
+                state_machine = ProgramInput;
+                dbg_state_transition(ProgramDialog, ProgramInput);
+            }
+            ProgramInput => {
+                let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
+                if (buffer.len() > 0) && buffer[buffer.len() - 1] == 04 {
+                    println!("");
+                    println!("[ PROGRAM INPUT ] Information submitted.");
+                    debug!("[ {:?} ] Buffer: {=[u8]:x}", ProgramInput, buffer);
+                    buffer.pop();
+                    debug!(
+                        "[ {:?} ] Got rid of EOT char. New buffer: {=[u8]:x}",
+                        ProgramInput, buffer
+                    );
+                    program_input = buffer.to_vec();
+                    debug!("[ {:?} ] program_input assigned", ProgramInput);
+                    println!("[ PROGRAM INPUT ] Computing program input hash");
+                    let mut hash_buffer: &[u8] = buffer;
+                    debug!("[ {:?} ] hash_buffer initialized.", ProgramInput);
+                    trace!("[ {:?} ] hash_buffer: {:?}", ProgramInput, hash_buffer);
+                    while !hash_buffer.is_empty() {
+                        // All the HW Sha functions are infallible so unwrap is fine to use if
+                        // you use block!
+                        hash_buffer = block!(hasher.update(hash_buffer)).unwrap();
+                        trace!("[ {:?} ] hash_buffer: {:?}", ProgramInput, hash_buffer);
+                    }
+                    let mut output = [0u8; 32];
+                    block!(hasher.finish(output.as_mut_slice())).unwrap();
+                    debug!("[ {:?} ] hash: {:?}", ProgramInput, output);
+                    program_hash = output[0..preparation.total_size].to_vec();
+                    buffer.zeroize();
+                    debug!(
+                        "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
+                        ProgramInput, buffer
+                    );
+                    debug!("[ {:?} ] program_hash assigned.", ProgramInput);
+                    println!(
+                        "[ PROGRAM INPUT ] Program input hash computed.\n\
+                              The program input hash determines the choices of\n\
+                              basis for the quantum measurement. These are:"
+                    );
+                    println!("");
+                    println!("{=[u8]:b}", program_hash);
+                    println!("");
+                    wdt = watchdog_feed(wdt, MeasurementInput);
+                    state_machine = MeasurementDialog;
+                    dbg_state_transition(ProgramInput, MeasurementDialog);
+                }
+            }
+            MeasurementDialog => {
                 println!("[ MEASUREMENT ] The protocol is in measurement phase.");
                 println!(
                     "[ MEASUREMENT ] Please provide the measurement information in JSON format."
@@ -289,74 +366,104 @@ fn main() -> ! {
                 );
                 println!("[ MEASUREMENT ] Press CTRL+D (UTF8 0004, EOT) to submit information.");
                 println!("");
-                wdt.feed();
-                debug!("[ MeasurementDialog ] Watchdog fed.");
-                state_machine = StateMachine::MeasurementInput;
-                debug!("[ MeasurementDialog ] Protocol transitioned to state 'MeasurementInput'.");
+                wdt = watchdog_feed(wdt, MeasurementDialog);
+                state_machine = MeasurementInput;
+                dbg_state_transition(MeasurementDialog, MeasurementInput);
             }
-            StateMachine::MeasurementInput => {
+            MeasurementInput => {
                 let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
                 if (buffer.len() > 0) && buffer[buffer.len() - 1] == 04 {
                     println!("");
                     println!("[ MEASUREMENT ] Information submitted. Validating...");
-                    debug!("[ MeasurementInput ] Buffer: {=[u8]:x}", buffer);
+                    debug!("[ {:?} ] Buffer: {=[u8]:x}", MeasurementInput, buffer);
                     buffer.pop();
                     debug!(
-                        "[ MeasurementInput ] Got rid of EOT char. New buffer: {=[u8]:x}",
-                        buffer
+                        "[ {:?} ] Got rid of EOT char. New buffer: {=[u8]:x}",
+                        MeasurementInput, buffer
                     );
                     match ConjugateCodingMeasurePlaintext::deserialize(&buffer) {
                         Err(_) => {
                             error!("[ MEASUREMENT ] Protocol wasn't able to parse the string. Please retry.");
                             buffer.zeroize();
-                            debug!("[ MeasurementInput ] Buffer has been zeroized: New buffer: {=[u8]:x}", buffer);
-                            state_machine = StateMachine::MeasurementDialog;
-                            debug!("[ MeasurementInput ] Protocol transitioned to state 'MeasurementDialog'.");
+                            debug!(
+                                "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
+                                MeasurementInput, buffer
+                            );
+                            state_machine = MeasurementDialog;
+                            dbg_state_transition(MeasurementInput, MeasurementDialog);
                         }
                         Ok(deserialized_buffer) => {
                             println!("[ MEASUREMENT ] JSON input is of the right format. Validating information...");
                             debug!(
-                                "[ MeasurementInput ] deserialized_buffer: {:?}",
-                                deserialized_buffer
+                                "[ {:?} ] deserialized_buffer: {:?}",
+                                MeasurementInput, deserialized_buffer
                             );
                             buffer.zeroize();
-                            debug!("[ MeasurementInput ] Buffer has been zeroized: New buffer: {=[u8]:x}", buffer);
+                            debug!(
+                                "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
+                                MeasurementInput, buffer
+                            );
                             match ConjugateCodingMeasure::new_plaintext(
                                 &preparation,
                                 deserialized_buffer.outcomes.clone(),
-                                deserialized_buffer.choices.clone(),
+                                program_hash.clone(),
                             ) {
                                 Ok(result) => {
                                     println!("[ MEASUREMENT ] Information validated.");
                                     measurement = result;
-                                    debug!("[ MeasurementInput ] Measurement struct assigned.");
-                                    state_machine = StateMachine::ComputeSecret;
-                                    debug!("[ MeasurementInput ] Protocol transitioning to state 'ComputeSecret'.");
+                                    debug!(
+                                        "[ {:?} ] Measurement struct assigned.",
+                                        MeasurementInput
+                                    );
+                                    state_machine = ComputeSecret;
+                                    dbg_state_transition(MeasurementInput, ComputeSecret);
                                 }
                                 Err(e) => {
                                     error!("[ MEASUREMENT ] Information validation failed with error:\n      \
                                             {:?}. \
                                             Please retry.", e);
-                                    state_machine = StateMachine::MeasurementDialog;
-                                    debug!("[ MeasurementInput ] Protocol transitioned to state 'MeasurementDialog'.");
+                                    state_machine = MeasurementDialog;
+                                    dbg_state_transition(MeasurementInput, MeasurementDialog);
                                 }
                             }
+                            program_hash.zeroize();
                         }
                     };
+                    wdt = watchdog_feed(wdt, MeasurementInput);
                 }
-                wdt.feed();
-                debug!("[ MeasurementInput ] Watchdog fed.");
             }
-            StateMachine::ComputeSecret => {
-                let computed = ConjugateCodingResult::new(&preparation, &measurement);
-                wdt.feed();
-                state_machine = StateMachine::RunProgram;
+            ComputeSecret => {
+                println!("[ RESULT ] I'm now using the information provided to compute a result.");
+                match ConjugateCodingResult::new(&preparation, &measurement) {
+                    Err(e) => {
+                        error!(
+                            "[ RESULT ] Result computation hasn't passed security validation: {:?}",
+                            e
+                        );
+                        error!("[ RESULT ] Restarting protocol...");
+                        preparation.zeroize();
+                        measurement.zeroize();
+                        debug!("[ ComputeSecret ] Protocol data zeroized.");
+                        state_machine = PreparationDialog;
+                        dbg_state_transition(ComputeSecret, PreparationDialog);
+                    }
+                    Ok(_) => {
+                        println!("[ RESULT ] Security verification passed! Unlocking program...");
+                        state_machine = RunProgram;
+                        dbg_state_transition(ComputeSecret, RunProgram);
+                    }
+                }
+                wdt = watchdog_feed(wdt, ComputeSecret);
             }
-            StateMachine::RunProgram => {
+            RunProgram => {
                 wdt.feed();
-                state_machine = StateMachine::FinalDialog;
+                println! {""};
+                println!("Program result: {:?}", your_program_here(&program_input));
+                println! {""};
+                println! {"Bye! Restarting protocol..."}
+                state_machine = PreparationInput;
+                dbg_state_transition(RunProgram, PreparationInput);
             }
-            StateMachine::FinalDialog => wdt.feed(),
         }
     }
 }
@@ -414,6 +521,23 @@ fn store_serial_buffer<'a>(
         trace!("store_serial_buffer: New Buffer: {=[u8]:x}", buffer);
     }
     return buffer;
+}
+
+fn dbg_state_transition(state1: StateMachine, state2: StateMachine) {
+    debug!(
+        "[ {:?} ] Protocol transitioned to state '{}'",
+        state1, state2
+    );
+}
+
+fn watchdog_feed(mut wdt: Wdt<TIMG0>, state: StateMachine) -> Wdt<TIMG0> {
+    wdt.feed();
+    debug!("[ {:?} ] Watchdog fed.", state);
+    return wdt;
+}
+
+fn your_program_here(_program_input: &Vec<u8>) -> Vec<u8> {
+    return vec![0; 0];
 }
 
 // let mut aes = Aes::new(peripherals.AES);
