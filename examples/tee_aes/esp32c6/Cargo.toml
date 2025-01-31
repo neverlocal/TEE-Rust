@@ -1,0 +1,44 @@
+[package]
+name = "tee-rust-example-esp32c6-tee"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Logging
+defmt = { version = "0.3.10", features = [ "alloc" ] }
+
+# Memory safety
+zeroize = "1.8.1"
+
+# Hashing macros
+nb = "1.1.0"
+
+# Esp dependencies
+esp-alloc = "0.6.0"
+esp-hal = { version = "0.23.1", features = [
+    "esp32c6",
+    "unstable",
+] }
+esp-backtrace = { version = "0.15.0", features = [
+    "esp32c6",
+    "panic-handler",
+    "exception-handler",
+    "defmt",
+] }
+
+# USB device and serial dependencies
+esp-println = { version = "0.13.0", features = [
+    "esp32c6",
+    "log",
+    "defmt-espflash",
+] }
+
+embedded-io         = { version = "0.6.1", default-features = false }
+
+# Serialization/Deserialization
+serde = { version = "1.0.217",  default-features = false, features = [ "alloc", "derive"] }
+serde_json = { version = "1.0.138", default-features = false, features = ["alloc"] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde"] }
+
+# Conjugate coding
+conjugate_coding = { path = "../../../conjugate_coding_library", default-features = false, features = ["defmt"] }
