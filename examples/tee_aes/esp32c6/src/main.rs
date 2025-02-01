@@ -17,7 +17,7 @@ use alloc::vec;
 use alloc::vec::Vec; // Needed for buffer manipulation
 
 use alloc::string::String;
-use hex;
+use hex::{self, decode};
 use serde::de::Error;
 
 use core::ptr::addr_of_mut; // Needed to initialize heap
@@ -184,11 +184,13 @@ fn aes256(buffer: &mut Vec<u8>, mode: Mode, aes: &mut Aes<'_>, sha: &mut Sha<'_>
         match mode {
             Mode::Encryption256 => {
                 trace!("[ aes256 ] Encrypting chunk: {:?}", j);
-                aes.process(&mut blocks[j], Mode::Decryption256, keybuf);
+                trace!("[ aes256 ] Decrypted chunk: {=[u8]:x}", blocks[j]);
+                aes.process(&mut blocks[j], Mode::Encryption256, keybuf);
                 trace!("[ aes256 ] Encrypted chunk: {=[u8]:x}", blocks[j]);
             }
             Mode::Decryption256 => {
                 trace!("[ aes256 ] Decrypting chunk: {:?}", j);
+                trace!("[ aes256 ] Encrypted chunk: {=[u8]:x}", blocks[j]);
                 aes.process(&mut blocks[j], Mode::Decryption256, keybuf);
                 trace!("[ aes256 ] Decrypted chunk: {=[u8]:x}", blocks[j]);
             }
@@ -375,9 +377,16 @@ fn main() -> ! {
                 println!("======================================================================");
                 println!("This is TEE-Rust.");
                 println!("The following example uses an ESP32-C6 as an encrypted enclave.");
-                warn!("The current utility accepts preparation results in plaintext. This is \
-                       cryptographically insecure, and useful only for educational purposes. Use \
-                       at your own risk!"
+                warn!(  
+                    "The current utility uses AES to exchange preparation\n    \
+                       results. This is insecure for a lot of reasons. At the\n    \
+                       bare minimum, we would like to have a MAC on top of it\n    \
+                       or use a AEAD directly. Even better, we would like to \n    \
+                       switch to a quantum-resistant version of TLS. We have \n    \
+                       not yet done this because the standards are still in  \n    \
+                       the process of being discussed/approved. All in all,  \n    \
+                       this application is useful for educational purposes   \n    \
+                       only. Use at your own risk!"
                 );
                 println!("======================================================================");
                 println!("[ PREPARATION ] The protocol is in preparation phase.");
@@ -405,8 +414,8 @@ fn main() -> ! {
                         "[ {:?} ] Got rid of EOT char. New buffer: {=[u8]:x}",
                         PreparationInput, buffer
                     );
-                    let mut decrypted_buffer =
-                        aes256(buffer, Mode::Decryption256, &mut aes, &mut sha);
+                    let mut decrypted_buffer = 
+                        aes256(&mut decode(&buffer).unwrap(), Mode::Decryption256, &mut aes, &mut sha);
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
