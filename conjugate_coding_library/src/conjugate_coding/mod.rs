@@ -577,7 +577,7 @@ impl ConjugateCodingResult {
 
         let purged: SecretBox<Vec<u8>> = Self::purge_noise(&preparation, &measurement);
 
-        match Self::verify(&preparation,&measurement, &purged) {
+        match Self::verify(&preparation,&measurement, &purged,0) {
             Ok(()) => {
                 let secret: SecretBox<Vec<u8>> = Self::compute_secret(&preparation, &purged);
                 Ok(ConjugateCodingResult{
@@ -662,31 +662,38 @@ impl ConjugateCodingResult {
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context;
     /// @param purged:        A reference to the purged mesurements vector.
+    /// @param error:         The error tolerance in the verification procedure, 
+    ///                       defining the Hamming distance radius within which a
+    ///                       bitstring is considered acceptable.
     ///
     fn verify (
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
-        purged: &SecretBox<Vec<u8>>
+        purged: &SecretBox<Vec<u8>>,
+        error: usize
     )  -> Result<(), ConjugateCodingResultError> {
     
         // We keep the count of how many 1s in the bitmask we encountered so far.
         let mut counter: usize = 0;
-        let mut trip_bit = 0;
+        let mut trip_bits = 0;
         for byte in 0..preparation.total_size {
             for bit in 0..8 {
-                // We found a 1 in the bitmask!
+                // We found a 1 in the bitmask. So this is a security bit and we
+                // need to check against our security0 and security1 tables.
                 if is_nth_bit_set(preparation.bitmask.expose_secret()[byte], bit) {
                     // If we measured the 1st bit, we need to use security0.
                     if !is_nth_bit_set(measurement.choices.expose_secret()[byte], bit) {
+                        // The actual check. When it fails we increment the error counter.
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
                             != is_nth_bit_set(preparation.security0.expose_secret()[counter/8],counter%8) {
-                                trip_bit = 1;
+                                trip_bits += 1;
                             }
                     // If we measured the 2nd bit, we need to use security1.
                     } else {
+                        // The actual check. When it fails we increment the error counter.
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
                             != is_nth_bit_set(preparation.security1.expose_secret()[counter/8],counter%8) {
-                                trip_bit = 1;
+                                trip_bits += 1;
                             }                        
                     }
                     counter += 1;
@@ -694,7 +701,7 @@ impl ConjugateCodingResult {
             }
             if counter == 8*preparation.security_size { break }
         }
-        if trip_bit != 0 { return Err(ConjugateCodingResultError::VerificationFailed) }
+        if trip_bits > error { return Err(ConjugateCodingResultError::VerificationFailed) }
         Ok(())
     }
 
