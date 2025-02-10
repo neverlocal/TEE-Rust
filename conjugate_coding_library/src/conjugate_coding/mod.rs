@@ -699,7 +699,6 @@ impl ConjugateCodingResult {
                     bitmask_bit_counter += 1;
                 }
             }
-            if bitmask_bit_counter == 8*preparation.security_size { break }
         }
         if trip_bits > error { return Err(ConjugateCodingResultError::VerificationFailed) }
         Ok(())
