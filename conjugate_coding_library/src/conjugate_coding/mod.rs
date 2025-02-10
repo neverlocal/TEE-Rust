@@ -170,6 +170,19 @@ impl Format for ConjugateCodingPrepareError {
     }
 }
 
+impl Default for ConjugateCodingPrepare {
+    fn default() -> Self {
+        Self {
+            secret_size: 0,
+            security_size: 0,
+            total_size: 0,
+            orderings: SecretBox::new(Box::new(vec![0;0])),
+            bitmask: SecretBox::new(Box::new(vec![0;0])),
+            security0: SecretBox::new(Box::new(vec![0;0])),
+            security1: SecretBox::new(Box::new(vec![0;0])),
+        }
+    }
+}
 
 impl ConjugateCodingPrepare {
 
@@ -275,20 +288,6 @@ impl ConjugateCodingPrepare {
         
     }
 
-    /// @brief   Creates a struct filled with zero values.
-    ///
-    pub fn new_from_zero() -> ConjugateCodingPrepare {
-        return ConjugateCodingPrepare {
-            secret_size: 0,
-            security_size: 0,
-            total_size: 0,
-            orderings: SecretBox::new(Box::new(vec![0;0])),
-            bitmask: SecretBox::new(Box::new(vec![0;0])),
-            security0: SecretBox::new(Box::new(vec![0;0])),
-            security1: SecretBox::new(Box::new(vec![0;0])),
-        }
-    }
-
     /// @brief   Works as new, but accepts plaintext values and boxes them automatically.
     ///
     ///          Should be called by the party preparing the qubits.
@@ -392,6 +391,15 @@ impl Format for ConjugateCodingMeasureError {
     }
 }
 
+impl Default for ConjugateCodingMeasure {
+    fn default() -> Self {
+        Self {
+            outcomes: SecretBox::new(Box::new(vec![0;0])),
+            choices: SecretBox::new(Box::new(vec![0;0])),
+        }
+    }
+}
+
 impl ConjugateCodingMeasure {
     
     #[cfg(feature = "debug")]
@@ -452,15 +460,6 @@ impl ConjugateCodingMeasure {
             outcomes,
             choices,
         })
-    }
-
-    /// @brief   Creates a struct filled with zero values.
-    ///
-    pub fn new_from_zero() -> ConjugateCodingMeasure {
-        return ConjugateCodingMeasure {
-            outcomes: SecretBox::new(Box::new(vec![0;0])),
-            choices: SecretBox::new(Box::new(vec![0;0])),
-        }
     }
 
     /// @brief   Works as new, but accepts plaintext values and boxes them automatically.

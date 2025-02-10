@@ -306,8 +306,8 @@ fn main() -> ! {
     //////////////////////
     // CONJUGATE CODING //
     //////////////////////
-    let mut preparation = ConjugateCodingPrepare::new_from_zero();
-    let mut measurement = ConjugateCodingMeasure::new_from_zero();
+    let mut preparation = ConjugateCodingPrepare::default();
+    let mut measurement = ConjugateCodingMeasure::default();
 
     /////////////////////
     // OTHER VARIABLES //
