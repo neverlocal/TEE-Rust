@@ -11,7 +11,7 @@ use serde::{Serialize, Serializer};
 // Data structure holding all the needed params in one place.
 #[derive(Serialize)]
 struct ConjugateCodingMeasurePlaintext {
-    outcomes: Vec<u8>
+    outcomes: Vec<u8>,
 }
 
 // We serialize vectors as hex strings to save memory in the TEE.
@@ -31,11 +31,11 @@ impl ConjugateCodingMeasurePlaintext {
         #[derive(Serialize)]
         struct HexPlainData<'a> {
             #[serde(serialize_with = "serialize_vec_to_hex_string")]
-            outcomes: &'a [u8]
+            outcomes: &'a [u8],
         }
         // Create a temporary struct with the same data
         let hex_data = HexPlainData {
-            outcomes: &self.outcomes
+            outcomes: &self.outcomes,
         };
         serde_json::to_string(&hex_data)
     }
@@ -51,7 +51,7 @@ enum StateMachine {
 }
 
 fn main() {
-    use StateMachine::{FirstDialog, SizeInput, OutcomesInput, Output};
+    use StateMachine::{FirstDialog, OutcomesInput, Output, SizeInput};
     std::env::set_var("RUST_LOG", "info"); // Set the logging level
     env_logger::builder()
         .format_target(false)
@@ -60,7 +60,7 @@ fn main() {
     debug!("Environment logger set and initialized.");
 
     let mut plain_data = ConjugateCodingMeasurePlaintext {
-        outcomes: vec![0; 0]
+        outcomes: vec![0; 0],
     };
     debug!("plain_data initialized.");
 
@@ -82,39 +82,66 @@ fn main() {
                           that the TEE-Rust Esp32c6 example can acquire."
                 );
                 state_machine = SizeInput;
-                debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", FirstDialog);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'SizeInput'.",
+                    FirstDialog
+                );
             }
             SizeInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for total number of bytes.", SizeInput);
+                debug!(
+                    "[ {:?} ] Displaying request for total number of bytes.",
+                    SizeInput
+                );
                 println!("Enter the total number of classical bytes to recover:");
                 let parsed: String = read!("{}\n");
                 debug!("[ {:?} ] String captured. string: {}", SizeInput, parsed);
                 match parsed.parse::<usize>() {
                     Ok(output) => {
-                        debug!("[ {:?} ] String parsed correctly. output: {}", SizeInput, output);
+                        debug!(
+                            "[ {:?} ] String parsed correctly. output: {}",
+                            SizeInput, output
+                        );
                         total_size = output;
-                        debug!("[ {:?} ] secret_size assigned value: {}", SizeInput, total_size);
+                        debug!(
+                            "[ {:?} ] secret_size assigned value: {}",
+                            SizeInput, total_size
+                        );
                         state_machine = OutcomesInput;
-                        debug!("[ {:?} ] Protocol transitioned to state 'OutcomesInput'.", SizeInput)
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'OutcomesInput'.",
+                            SizeInput
+                        )
                     }
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
-                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SizeInput, e);
+                        debug!(
+                            "[ {:?} ] String parsed incorrectly. Error: {}",
+                            SizeInput, e
+                        );
                         total_size = 0;
                         debug!(
                             "[ {:?} ] secret_size wiped. secret_size: {}",
-                            SizeInput,
-                            total_size
+                            SizeInput, total_size
                         );
-                        debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", SizeInput);
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'SizeInput'.",
+                            SizeInput
+                        );
                     }
                 }
             }
             OutcomesInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for orderings bitstring.", OutcomesInput);
-                debug!("[ {:?} ] total_size set to {}", OutcomesInput, 2 * total_size);
+                debug!(
+                    "[ {:?} ] Displaying request for orderings bitstring.",
+                    OutcomesInput
+                );
+                debug!(
+                    "[ {:?} ] total_size set to {}",
+                    OutcomesInput,
+                    2 * total_size
+                );
                 println!(
                     "Please enter the MEASUREMENT OUTCOME bitstring. You will need\n\
                           to provide {} bytes, in binary form. You will be\n\
@@ -135,7 +162,10 @@ fn main() {
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", OutcomesInput, parsed);
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        OutcomesInput, parsed
+                    );
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
@@ -154,11 +184,13 @@ fn main() {
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. orderings: {:x?}",
-                    OutcomesInput,
-                    plain_data.outcomes
+                    OutcomesInput, plain_data.outcomes
                 );
                 state_machine = Output;
-                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", OutcomesInput);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Output'.",
+                    OutcomesInput
+                );
             }
             Output => {
                 println!("--------------------------------------------------");

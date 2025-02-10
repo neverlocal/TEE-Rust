@@ -23,19 +23,19 @@ use serde::de::Error;
 use core::ptr::addr_of_mut; // Needed to initialize heap
 
 // Logging, printing etc.
-use defmt::{trace, debug, info, warn, error, println, Format};
+use defmt::{debug, error, info, println, trace, warn, Format};
 use esp_backtrace as _;
 use esp_println as _;
 
 use esp_hal::{
-    clock::CpuClock, // Set CPU clock
-    time::Duration, // Needed to manipulate watchogs
-    peripherals::TIMG0, // Needed to manipulate watchogs
-    timer::timg::{MwdtStage, TimerGroup, Wdt}, // Needed to manipulate watchogs
-    usb_serial_jtag::UsbSerialJtag, // Needed to communicate over USB
-    sha::{Sha, Sha256}, // Hashing
-    aes::{Aes, Mode},       // AES ecnryption-decryption scheme
+    aes::{Aes, Mode}, // AES ecnryption-decryption scheme
+    clock::CpuClock,  // Set CPU clock
     main,
+    peripherals::TIMG0,                        // Needed to manipulate watchogs
+    sha::{Sha, Sha256},                        // Hashing
+    time::Duration,                            // Needed to manipulate watchogs
+    timer::timg::{MwdtStage, TimerGroup, Wdt}, // Needed to manipulate watchogs
+    usb_serial_jtag::UsbSerialJtag,            // Needed to communicate over USB
 };
 
 use nb::block; // Needed for hashing
@@ -48,8 +48,7 @@ use serde::{Deserialize, Deserializer}; // We do like our JSON very much
 
 // Finally the only meaningful thing in a sea of boilerplate
 use conjugate_coding::{
-    conjugate_coding::ConjugateCodingMeasure, 
-    conjugate_coding::ConjugateCodingPrepare, 
+    conjugate_coding::ConjugateCodingMeasure, conjugate_coding::ConjugateCodingPrepare,
     conjugate_coding::ConjugateCodingResult,
 };
 
@@ -68,7 +67,6 @@ fn init_heap() {
         ));
     }
 }
-
 
 //////////////
 // WATCHDOG //
@@ -138,7 +136,6 @@ fn store_serial_buffer<'a>(
     return buffer;
 }
 
-
 //////////////////
 // CRYPTOGRAPHY //
 //////////////////
@@ -206,7 +203,6 @@ fn aes256(buffer: &mut Vec<u8>, mode: Mode, aes: &mut Aes<'_>, sha: &mut Sha<'_>
     return flattened;
 }
 
-
 ///////////////////
 // State Machine //
 ///////////////////
@@ -229,7 +225,6 @@ fn dbg_state_transition(state1: StateMachine, state2: StateMachine) {
         state1, state2
     );
 }
-
 
 //////////////////////
 // CONJUGATE CODING //
@@ -297,7 +292,6 @@ impl ConjugateCodingMeasurePlaintext {
         })
     }
 }
-
 
 #[main]
 fn main() -> ! {
@@ -377,7 +371,7 @@ fn main() -> ! {
                 println!("======================================================================");
                 println!("This is TEE-Rust.");
                 println!("The following example uses an ESP32-C6 as an encrypted enclave.");
-                warn!(  
+                warn!(
                     "The current utility uses AES to exchange preparation\n    \
                        results. This is insecure for a lot of reasons. At the\n    \
                        bare minimum, we would like to have a MAC on top of it\n    \
@@ -414,8 +408,12 @@ fn main() -> ! {
                         "[ {:?} ] Got rid of EOT char. New buffer: {=[u8]:x}",
                         PreparationInput, buffer
                     );
-                    let mut decrypted_buffer = 
-                        aes256(&mut decode(&buffer).unwrap(), Mode::Decryption256, &mut aes, &mut sha);
+                    let mut decrypted_buffer = aes256(
+                        &mut decode(&buffer).unwrap(),
+                        Mode::Decryption256,
+                        &mut aes,
+                        &mut sha,
+                    );
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",

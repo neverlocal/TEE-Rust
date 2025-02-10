@@ -68,7 +68,9 @@ enum StateMachine {
 }
 
 fn main() {
-    use StateMachine::{FirstDialog, SecurityInput, OrderingsInput, Security0Input, Security1Input, Output};
+    use StateMachine::{
+        FirstDialog, OrderingsInput, Output, Security0Input, Security1Input, SecurityInput,
+    };
     std::env::set_var("RUST_LOG", "info"); // Set the logging level
     env_logger::builder()
         .format_target(false)
@@ -105,25 +107,39 @@ fn main() {
                        purposes. Use at your own risk!"
                 );
                 state_machine = SecurityInput;
-                debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", FirstDialog);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'SecurityInput'.",
+                    FirstDialog
+                );
             }
             SecurityInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for security bytes.", SecurityInput);
+                debug!(
+                    "[ {:?} ] Displaying request for security bytes.",
+                    SecurityInput
+                );
                 println!("Enter the number of security bytes:");
                 let parsed: String = read!("{}\n");
-                debug!("[ {:?} ] String captured. string: {}", SecurityInput, parsed);
+                debug!(
+                    "[ {:?} ] String captured. string: {}",
+                    SecurityInput, parsed
+                );
                 match parsed.parse::<usize>() {
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
-                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SecurityInput, e);
+                        debug!(
+                            "[ {:?} ] String parsed incorrectly. Error: {}",
+                            SecurityInput, e
+                        );
                         plain_data.security_size = 0;
                         debug!(
                             "[ {:?} ] security_size wiped. security_size: {}",
-                            SecurityInput,
-                            plain_data.security_size
+                            SecurityInput, plain_data.security_size
                         );
-                        debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", SecurityInput);
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'SecurityInput'.",
+                            SecurityInput
+                        );
                     }
                     Ok(output) => {
                         debug!(
@@ -133,17 +149,22 @@ fn main() {
                         plain_data.security_size = output;
                         debug!(
                             "[ {:?} ] security_size assigned value: {}",
-                            SecurityInput,
-                            plain_data.security_size
+                            SecurityInput, plain_data.security_size
                         );
                         state_machine = OrderingsInput;
-                        debug!("[ {:?} ] Protocol transitioned to state 'OrderingsInput'.", SecurityInput)
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'OrderingsInput'.",
+                            SecurityInput
+                        )
                     }
                 }
             }
             OrderingsInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for orderings bitstring.", OrderingsInput);
+                debug!(
+                    "[ {:?} ] Displaying request for orderings bitstring.",
+                    OrderingsInput
+                );
                 println!(
                     "Please enter the ORDERINGS bitstring. You will need\n\
                           to provide {} bytes, in binary form. You will be\n\
@@ -164,7 +185,10 @@ fn main() {
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", OrderingsInput, parsed);
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        OrderingsInput, parsed
+                    );
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
@@ -183,21 +207,29 @@ fn main() {
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. orderings: {:x?}",
-                    OrderingsInput,
-                    plain_data.orderings
+                    OrderingsInput, plain_data.orderings
                 );
                 state_machine = Security0Input;
-                debug!("[ {:?} ] Protocol transitioned to state 'Security0Input'.", OrderingsInput);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Security0Input'.",
+                    OrderingsInput
+                );
             }
             Security0Input => {
                 debug!("[ {:?} ] Checking size of security_size", Security0Input);
                 if plain_data.security_size == 0 {
                     state_machine = Output;
-                        debug!("[ {:?} ] security_size is 0. Protocol transitioned to state 'Output'.", Security0Input);
+                    debug!(
+                        "[ {:?} ] security_size is 0. Protocol transitioned to state 'Output'.",
+                        Security0Input
+                    );
                 } else {
                     debug!("[ {:?} ] security_size is bigger than 0.", Security0Input);
                     println!("--------------------------------------------------");
-                    debug!("[ {:?} ] Displaying request for security0 bitstring.", Security0Input);
+                    debug!(
+                        "[ {:?} ] Displaying request for security0 bitstring.",
+                        Security0Input
+                    );
                     println!(
                         "Please enter the SECURITY0 bitstring. This is the\n\
                         bitstring of security parameters when the measured\n\
@@ -220,7 +252,10 @@ fn main() {
                         );
                         println!("Please provide byte {}:", i);
                         let parsed: String = read!("{}\n");
-                        debug!("[ {:?} ] String captured. string: {}", Security0Input, parsed);
+                        debug!(
+                            "[ {:?} ] String captured. string: {}",
+                            Security0Input, parsed
+                        );
                         if parsed.len() > 8 {
                             error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                         } else {
@@ -231,7 +266,10 @@ fn main() {
                                 }
                                 Ok(result) => {
                                     plain_data.security0.push(result);
-                                    debug!("[ {:?} ] New valued pushed.: {}", Security0Input, result);
+                                    debug!(
+                                        "[ {:?} ] New valued pushed.: {}",
+                                        Security0Input, result
+                                    );
                                     i += 1;
                                 }
                             }
@@ -239,16 +277,21 @@ fn main() {
                     }
                     debug!(
                         "[ {:?} ] Exited while loop. security0: {:x?}",
-                        Security0Input,
-                        plain_data.security0
+                        Security0Input, plain_data.security0
                     );
                     state_machine = Security1Input;
-                    debug!("[ {:?} ] Protocol transitioned to state 'Security1Input'.", Security0Input);
+                    debug!(
+                        "[ {:?} ] Protocol transitioned to state 'Security1Input'.",
+                        Security0Input
+                    );
                 }
             }
             Security1Input => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for security1 bitstring.", Security1Input);
+                debug!(
+                    "[ {:?} ] Displaying request for security1 bitstring.",
+                    Security1Input
+                );
                 println!(
                     "Please enter the SECURITY1 bitstring. This is the\n\
                       bitstring of security parameters when the measured\n\
@@ -271,7 +314,10 @@ fn main() {
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", Security1Input, parsed);
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        Security1Input, parsed
+                    );
                     if parsed.len() > 8 {
                         error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
                     } else {
@@ -290,11 +336,13 @@ fn main() {
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. security1: {:x?}",
-                    Security1Input,
-                    plain_data.security1
+                    Security1Input, plain_data.security1
                 );
                 state_machine = Output;
-                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", Security1Input);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Output'.",
+                    Security1Input
+                );
             }
             Output => {
                 println!("--------------------------------------------------");

@@ -20,18 +20,18 @@ use serde::de::Error;
 use core::ptr::addr_of_mut; // Needed to initialize heap
 
 // Logging, printing etc.
-use defmt::{trace, debug, info, warn, error, println, Format};
+use defmt::{debug, error, info, println, trace, warn, Format};
 use esp_backtrace as _;
 use esp_println as _;
 
 use esp_hal::{
     clock::CpuClock, // Set CPU clock
-    time::Duration, // Needed to manipulate watchogs
-    peripherals::TIMG0, // Needed to manipulate watchogs
-    timer::timg::{MwdtStage, TimerGroup, Wdt}, // Needed to manipulate watchogs
-    usb_serial_jtag::UsbSerialJtag, // Needed to communicate over USB
-    sha::{Sha, Sha256}, // Hashing
     main,
+    peripherals::TIMG0,                        // Needed to manipulate watchogs
+    sha::{Sha, Sha256},                        // Hashing
+    time::Duration,                            // Needed to manipulate watchogs
+    timer::timg::{MwdtStage, TimerGroup, Wdt}, // Needed to manipulate watchogs
+    usb_serial_jtag::UsbSerialJtag,            // Needed to communicate over USB
 };
 
 use nb::block; // Needed for hashing
@@ -44,8 +44,7 @@ use serde::{Deserialize, Deserializer}; // We do like our JSON very much
 
 // Finally the only meaningful thing in a sea of boilerplate
 use conjugate_coding::{
-    conjugate_coding::ConjugateCodingMeasure, 
-    conjugate_coding::ConjugateCodingPrepare, 
+    conjugate_coding::ConjugateCodingMeasure, conjugate_coding::ConjugateCodingPrepare,
     conjugate_coding::ConjugateCodingResult,
 };
 
@@ -64,7 +63,6 @@ fn init_heap() {
         ));
     }
 }
-
 
 //////////////
 // WATCHDOG //
@@ -134,7 +132,6 @@ fn store_serial_buffer<'a>(
     return buffer;
 }
 
-
 //////////////////
 // CRYPTOGRAPHY //
 //////////////////
@@ -178,7 +175,6 @@ fn dbg_state_transition(state1: StateMachine, state2: StateMachine) {
         state1, state2
     );
 }
-
 
 //////////////////////
 // CONJUGATE CODING //
@@ -246,7 +242,6 @@ impl ConjugateCodingMeasurePlaintext {
         })
     }
 }
-
 
 #[main]
 fn main() -> ! {
@@ -325,7 +320,8 @@ fn main() -> ! {
                 println!("======================================================================");
                 println!("This is TEE-Rust.");
                 println!("The following example uses an ESP32-C6 as an encrypted enclave.");
-                warn!("The current utility accepts preparation results in plaintext. This is \
+                warn!(
+                    "The current utility accepts preparation results in plaintext. This is \
                        cryptographically insecure, and useful only for educational purposes. Use \
                        at your own risk!"
                 );
@@ -438,7 +434,7 @@ fn main() -> ! {
                     program_input = buffer.to_vec();
                     debug!("[ {:?} ] program_input assigned", ProgramInput);
                     println!("[ PROGRAM INPUT ] Computing program input hash");
-                    program_hash = hash256(buffer,&mut sha)[0..preparation.total_size].to_vec();
+                    program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
