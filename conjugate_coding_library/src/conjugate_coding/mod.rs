@@ -569,15 +569,20 @@ impl ConjugateCodingResult {
     /// 
     /// @param preparation:   A reference to the preparation context;
     /// @param measurements:  A reference to the measurement context.
+    /// @param error:         The error tolerance in the verification procedure, 
+    ///                       defining the Hamming distance radius within which a
+    ///                       bitstring is considered acceptable.
+
     ///
     pub fn new(
         preparation: &ConjugateCodingPrepare,
         measurement: &ConjugateCodingMeasure,
+        error:       usize
     ) -> Result<ConjugateCodingResult, ConjugateCodingResultError>{
 
         let purged: SecretBox<Vec<u8>> = Self::purge_noise(&preparation, &measurement);
 
-        match Self::verify(&preparation,&measurement, &purged,0) {
+        match Self::verify(&preparation,&measurement, &purged,error) {
             Ok(()) => {
                 let secret: SecretBox<Vec<u8>> = Self::compute_secret(&preparation, &purged);
                 Ok(ConjugateCodingResult{
