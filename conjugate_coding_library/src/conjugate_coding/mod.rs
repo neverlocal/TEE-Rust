@@ -674,7 +674,7 @@ impl ConjugateCodingResult {
     )  -> Result<(), ConjugateCodingResultError> {
     
         // We keep the count of how many 1s in the bitmask we encountered so far.
-        let mut counter: usize = 0;
+        let mut byte_counter: usize = 0;
         let mut trip_bits = 0;
         for byte in 0..preparation.total_size {
             for bit in 0..8 {
@@ -685,18 +685,18 @@ impl ConjugateCodingResult {
                     if !is_nth_bit_set(measurement.choices.expose_secret()[byte], bit) {
                         // The actual check. When it fails we increment the error counter.
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
-                            != is_nth_bit_set(preparation.security0.expose_secret()[counter/8],counter%8) {
+                            != is_nth_bit_set(preparation.security0.expose_secret()[byte_counter/8],counter%8) {
                                 trip_bits += 1;
                             }
                     // If we measured the 2nd bit, we need to use security1.
                     } else {
                         // The actual check. When it fails we increment the error counter.
                         if is_nth_bit_set(purged.expose_secret()[byte],bit)
-                            != is_nth_bit_set(preparation.security1.expose_secret()[counter/8],counter%8) {
+                            != is_nth_bit_set(preparation.security1.expose_secret()[byte_counter/8],counter%8) {
                                 trip_bits += 1;
                             }                        
                     }
-                    counter += 1;
+                    byte_counter += 1;
                 }
             }
             if counter == 8*preparation.security_size { break }
