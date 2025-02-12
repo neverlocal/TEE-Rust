@@ -302,7 +302,7 @@ impl ConjugateCodingPrepare {
     /// @param security0:      The security values vector for 1st bit measurements, of length security_size;
     /// @param security1:      The security values vector for 2nd bit measurements, of length security_size.
     ///
-    pub fn new_plaintext(
+    pub fn from_plaintext(
         secret_size: usize,
         security_size: usize,
         orderings: Vec<u8>,
@@ -490,7 +490,7 @@ impl ConjugateCodingMeasure {
     /// @outcomes:            The orderings vector, of length 2*(secret_size + security_size);
     /// @choices:             The vector containing choices of measurement bases, of length (secret_size + security_size).
     ///
-    pub fn new_plaintext(
+    pub fn from_plaintext(
         preparation: &ConjugateCodingPrepare,
         outcomes: Vec<u8>,
         choices: Vec<u8>,
