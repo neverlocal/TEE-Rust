@@ -351,7 +351,7 @@ fn main() {
                     "Thank you for having provided all the needed\n\
                         information. I will need a second to validate it."
                 );
-                match ConjugateCodingPrepare::new_plaintext(
+                match ConjugateCodingPrepare::from_plaintext(
                     0,
                     plain_data.security_size,
                     plain_data.orderings.clone(),

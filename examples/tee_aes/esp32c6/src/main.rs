@@ -458,7 +458,7 @@ fn main() -> ! {
                                 "[ {:?} ] decrypted_buffer has been zeroized: New decrypted_buffer: {=[u8]:x}",
                                 PreparationInput, decrypted_buffer
                             );
-                            match ConjugateCodingPrepare::new_plaintext(
+                            match ConjugateCodingPrepare::from_plaintext(
                                 0,
                                 deserialized_buffer.security_size,
                                 deserialized_buffer.orderings.clone(),
@@ -588,7 +588,7 @@ fn main() -> ! {
                                 "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
                                 MeasurementInput, buffer
                             );
-                            match ConjugateCodingMeasure::new_plaintext(
+                            match ConjugateCodingMeasure::from_plaintext(
                                 &preparation,
                                 deserialized_buffer.outcomes.clone(),
                                 program_hash.clone(),
