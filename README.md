@@ -1,7 +1,11 @@
 # TEE-Rust
 Because, frankly, doing this stuff in C sucked way too much.
 
-TEE-Rust is a small rust library that implements what we did in [this post](https://blog.neverlocal.com/tee-re-entry/). It provides a bunch of functions which all implement traits to make it memory safe/cryptographically secure as much as possible. A detailed description of what the library does can be found [here](). The library is `no_std` friendly and can be used on embedded systems.
+TEE-Rust is a small rust library that implements what we did in [this post](https://blog.neverlocal.com/tee-re-entry/). It provides a bunch of functions which all implement traits to make it memory safe/cryptographically secure as much as possible. 
+
+**A detailed description of what the library does can be found [here](https://blog.neverlocal.com/tee-library/).** Please refer to this blog post to understand how it works, both conceptually and practically.
+
+The library is `no_std` friendly and can be used on embedded systems.
 
 ## Installation
 
