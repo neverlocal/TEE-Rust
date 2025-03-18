@@ -468,7 +468,6 @@ impl ConjugateCodingMeasure {
         choices: SecretBox<Vec<u8>>,
     ) -> Result<ConjugateCodingMeasure, Vec<ConjugateCodingMeasureError>> {
         let mut error_vec: Vec<ConjugateCodingMeasureError> = Vec::new();
-
         if outcomes.expose_secret().len() != 2 * preparation.total_size {
             error_vec.push(ConjugateCodingMeasureError::OutcomesWL);
         }

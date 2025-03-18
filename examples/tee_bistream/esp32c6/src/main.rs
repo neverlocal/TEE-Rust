@@ -4,6 +4,8 @@
 // AES PASSWORD TO COMMUNICATE WITH THE TEE
 const SHARED_SECRET: &[u8] = "SUp4SeCp@sSw0rd".as_bytes();
 
+//59512135d326918f7187e6979e6fd9ddb173a4f1e4c5b8db0c8e3486511006cf21ef7a38715b4867fb63bed675cfff8581e8460b6487175ec896d6acf193dae322402137ea3381098c0c5621bdcdbc9aa7aaa22ec69c7e553a3e65443139bf7de47a0b273df1bc745f3665b7c7ac650b
+
 // Here you can feed your program to the TEE!
 fn your_program_here(_program_input: &Vec<u8>) -> Vec<u8> {
     return vec![0; 0];
@@ -33,7 +35,17 @@ use core::cell::{RefCell, Cell};
 use critical_section::{CriticalSection, Mutex};
 
 use esp_hal::{
-    aes::{Aes, Mode}, clock::CpuClock, gpio::{Event, Input, Io, Level, Output, Pull}, handler, interrupt::InterruptConfigurable, main, peripherals::TIMG0, ram, sha::{Sha, Sha256}, time::{self, Duration, Instant}, timer::timg::{MwdtStage, TimerGroup, Wdt}, usb_serial_jtag::UsbSerialJtag
+    aes::{Aes, Mode},
+    clock::CpuClock,
+    gpio::{Event, Input, InputConfig, Io, Level, Output, OutputConfig, Pull},
+    handler,
+    main,
+    peripherals::TIMG0,
+    ram,
+    sha::{Sha, Sha256},
+    time::{self, Duration, Instant},
+    timer::timg::{MwdtStage, TimerGroup, Wdt},
+    usb_serial_jtag::UsbSerialJtag
 };
 
 use nb::block; // Needed for hashing
@@ -379,7 +391,7 @@ static HERALD_SEEN: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
 #[ram]
 static HERALD_LOCKED: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
 #[ram]
-static HERALD_TIME: Mutex<Cell<Instant>> = Mutex::new(Cell::new(time::Instant::from_ticks(0)));
+static HERALD_TIME: Mutex<Cell<Instant>> = Mutex::new(Cell::new(time::Instant::EPOCH));
 #[ram]
 static OUTCOME0_SEEN: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
 #[ram]
@@ -428,8 +440,8 @@ fn see_herald(cs: CriticalSection<'_>) {
             return
         } else {
             debug!( "[ see_herald ] triggered at the right time." );
-            HERALD_TIME.borrow(cs).set(time::now());
-            debug!( "[ see_herald ] herald_time: {:?}", HERALD_TIME.borrow(cs).get().ticks() );
+            HERALD_TIME.borrow(cs).set(Instant::now());
+            debug!( "[ see_herald ] herald_time: {}", HERALD_TIME.borrow(cs).get() );
             HERALD_SEEN.borrow(cs).set(true);
         }
 }
@@ -446,9 +458,9 @@ fn see_outcome0(cs: CriticalSection<'_>) {
             return
         } else {
             debug!( "[ see_outcome0 ] triggered at the right time." );
-            let delay: Duration = time::now() - HERALD_TIME.borrow(cs).get();
-            if delay.ticks() >= MIN_OUTCOME_DELAY_US && delay.ticks() <= MAX_OUTCOME_DELAY_US {
-                debug!( "[ see_outcome0 ] delay: {:?}", delay.ticks() );
+            let delay: Duration = Instant::now() - HERALD_TIME.borrow(cs).get();
+            if delay.as_micros() >= MIN_OUTCOME_DELAY_US && delay.as_micros() <= MAX_OUTCOME_DELAY_US {
+                debug!( "[ see_outcome0 ] delay: {:?}", delay.as_micros() );
                 HERALD_LOCKED.borrow(cs).set(true);
                 OUTCOME0_SEEN.borrow(cs).set(true);
             }
@@ -467,9 +479,9 @@ fn see_outcome1(cs: CriticalSection<'_>) {
             return
         } else {
             debug!( "[ see_outcome1 ] triggered at the right time." );
-            let delay: Duration = time::now() - HERALD_TIME.borrow(cs).get();
-            if delay.ticks() >= MIN_OUTCOME_DELAY_US && delay.ticks() <= MAX_OUTCOME_DELAY_US {
-                debug!( "[ see_outcome1 ] delay: {:?}", delay.ticks() );
+            let delay: Duration = Instant::now() - HERALD_TIME.borrow(cs).get();
+            if delay.as_micros() >= MIN_OUTCOME_DELAY_US && delay.as_micros() <= MAX_OUTCOME_DELAY_US {
+                debug!( "[ see_outcome1 ] delay: {:?}", delay.as_micros() );
                 HERALD_LOCKED.borrow(cs).set(true);
                 OUTCOME1_SEEN.borrow(cs).set(true);
             }
@@ -508,12 +520,12 @@ fn main() -> ! {
     let mut io = Io::new(peripherals.IO_MUX);
     io.set_interrupt_handler(handler);
     
-    let mut running_pin = Output::new(peripherals.GPIO20, Level::Low);    
-    let mut basis_select_pin = Output::new(peripherals.GPIO19, Level::Low);
-    let receiving_pin = Input::new(peripherals.GPIO21, Pull::Up);
-    let herald_pin = Input::new(peripherals.GPIO22, Pull::Up);
-    let outcome0_pin = Input::new(peripherals.GPIO16, Pull::Up);
-    let outcome1_pin = Input::new(peripherals.GPIO17, Pull::Up);
+    let mut running_pin = Output::new(peripherals.GPIO20, Level::Low, OutputConfig::default());    
+    let mut basis_select_pin = Output::new(peripherals.GPIO19, Level::Low, OutputConfig::default());
+    let receiving_pin = Input::new(peripherals.GPIO21, InputConfig::default().with_pull(Pull::Down));
+    let herald_pin = Input::new(peripherals.GPIO22, InputConfig::default().with_pull(Pull::Down));
+    let outcome0_pin = Input::new(peripherals.GPIO16, InputConfig::default().with_pull(Pull::Down));
+    let outcome1_pin = Input::new(peripherals.GPIO17, InputConfig::default().with_pull(Pull::Down));
 
     //////////////
     // WATCHDOG //
@@ -528,7 +540,7 @@ fn main() -> ! {
     let mut wdt = timg0.wdt; // Use it to create a new watchdog
     info!("Watchdog created");
     let timeout_seconds = 300;
-    wdt.set_timeout(MwdtStage::Stage0, Duration::secs(timeout_seconds)); // Watchdog triggers after n secs of inactivity
+    wdt.set_timeout(MwdtStage::Stage0, Duration::from_secs(timeout_seconds)); // Watchdog triggers after n secs of inactivity
     info!("Timeout set to {} seconds.", timeout_seconds);
     wdt.enable(); // We enable the damn thing
     info!("Watchdog enabled.");
@@ -565,7 +577,7 @@ fn main() -> ! {
         ComputeSecret, MeasurementDialog, MeasurementInput, PreparationDialog, PreparationInput,
         ProgramDialog, ProgramInput, RunProgram,
     };
-    let mut state_machine = ProgramDialog;
+    let mut state_machine = PreparationDialog;
     info!("Protocol state machine initialized.");
 
     //////////////////////
@@ -735,8 +747,8 @@ fn main() -> ! {
                     program_input = buffer.to_vec();
                     debug!("[ {:?} ] program_input assigned", ProgramInput);
                     println!("[ PROGRAM INPUT ] Computing program input hash");
-                    //program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
-                    program_hash = hash256(buffer, &mut sha)[0..8].to_vec();
+                    program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
+                    //program_hash = hash256(buffer, &mut sha)[0..8].to_vec();
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
@@ -775,7 +787,7 @@ fn main() -> ! {
                 let mut success: Vec<u8> = vec![];
                 let mut outcomes_byte: u8 = 0;
                 let mut success_byte: u8 = 0;
-                let mut next_cycle = 0;
+                let mut next_cycle = 1;
                 // We set up and start the acquisition here
                 critical_section::with(|initialize_sec| {
                     // Attach interrupts
@@ -818,8 +830,8 @@ fn main() -> ! {
                     );
                     running_pin.set_high();
                 });
-                //while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < preparation.total_size }) {
-                while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < 127 }) {
+                while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < 16 * preparation.total_size}) {
+                //while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < 127 }) {
                     critical_section::with(|while_sec| {
                         // If we're not receiving, a whole cycle has completed and
                         // We can store values.
@@ -830,6 +842,7 @@ fn main() -> ! {
                             );
                             let cycle = CYCLE.borrow(while_sec).get();
                             if cycle == next_cycle {
+                                let cycle = cycle -1;
                                 debug!(
                                     "[ {:?} ] Cycle: {:?}.",
                                     MeasurementInput,
@@ -957,8 +970,8 @@ fn main() -> ! {
                 );
                 match ConjugateCodingMeasure::from_plaintext(
                     &preparation,
-                    program_hash.clone(),
                     outcomes.clone(),
+                    program_hash.clone(),
                 ) {
                     Ok(result) => {
                         println!("[ MEASUREMENT ] Information validated.");
@@ -967,15 +980,15 @@ fn main() -> ! {
                             "[ {:?} ] Measurement struct assigned.",
                             MeasurementInput
                         );
-                        // state_machine = ComputeSecret;
-                        // dbg_state_transition(MeasurementInput, ComputeSecret);
+                        state_machine = ComputeSecret;
+                        dbg_state_transition(MeasurementInput, ComputeSecret);
                     }
                     Err(e) => {
                         error!("[ MEASUREMENT ] Information validation failed with error:\n      \
                                 {:?}. \
                                 Please retry.", e);
-                        // state_machine = MeasurementDialog;
-                        // dbg_state_transition(MeasurementInput, MeasurementDialog);
+                        state_machine = MeasurementDialog;
+                        dbg_state_transition(MeasurementInput, MeasurementDialog);
                     }
                 }
                 program_hash.zeroize();
@@ -986,7 +999,7 @@ fn main() -> ! {
             ComputeSecret => {
                 println!("======================================================================");
                 println!("[ RESULT ] I'm now using the information provided to compute a result.");
-                match ConjugateCodingResult::new(&preparation, &measurement, 0) {
+                match ConjugateCodingResult::new(&preparation, &measurement, 4) {
                     Err(e) => {
                         error!(
                             "[ RESULT ] Result computation hasn't passed security validation: {:?}",
