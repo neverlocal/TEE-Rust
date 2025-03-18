@@ -3,13 +3,14 @@ const SHARED_SECRET: &[u8] = "SUp4SeCp@sSw0rd".as_bytes();
 
 // Logging facilities
 use env_logger;
-use log::{debug, error, trace, warn};
+use log::{debug, error, warn, trace};
 // Easy read from console
 #[macro_use]
 extern crate text_io;
 // Serialization stuff
 use hex;
 use serde::{Serialize, Serializer};
+use parse_int::parse;
 // Rewrite memory locations with 0s after drop, useful for security reasons
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -145,7 +146,12 @@ enum StateMachine {
 
 fn main() {
     use StateMachine::{
-        FirstDialog, OrderingsInput, Output, Security0Input, Security1Input, SecurityInput,
+        FirstDialog,
+        SecurityInput,
+        OrderingsInput,
+        Security0Input,
+        Security1Input,
+        Output,
     };
     std::env::set_var("RUST_LOG", "warn"); // Set the logging level
     env_logger::builder()
@@ -248,7 +254,8 @@ fn main() {
                 );
                 println!(
                     "Please enter the ORDERINGS bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
+                          to provide {} bytes, in decimal, hex or binary form using\n\
+                          the standard prefixes (none,0x,0b). You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
@@ -256,10 +263,21 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < plain_data.security_size {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.orderings {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "ORDERINGS bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "ORDERINGS bytes already provided (in hex notation): {:x?}",
                         plain_data.orderings
@@ -270,19 +288,15 @@ fn main() {
                         "[ {:?} ] String captured. string: {}",
                         OrderingsInput, parsed
                     );
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ {:?} ] Error: {}", OrderingsInput, e);
-                            }
-                            Ok(result) => {
-                                plain_data.orderings.push(result);
-                                debug!("[ {:?} ] New valued pushed.: {}", OrderingsInput, result);
-                                i += 1;
-                            }
+                    match parse::<u8>(&parsed) {
+                        Err(e) => {
+                            error!("Not a valid bitstring! Try again!");
+                            debug!("[ {:?} ] Error: {}", OrderingsInput, e);
+                        }
+                        Ok(result) => {
+                            plain_data.orderings.push(result);
+                            debug!("[ {:?} ] New valued pushed.: {}", OrderingsInput, result);
+                            i += 1;
                         }
                     }
                 }
@@ -315,7 +329,8 @@ fn main() {
                         "Please enter the SECURITY0 bitstring. This is the\n\
                         bitstring of security parameters when the measured\n\
                         bit is 0. You will need to provide {} bytes, in\n\
-                        binary form. You will be asked for one byte at a\n\
+                        decimal, hex or binary form using the standard prefixes\n\
+                        (none,0x,0b). You will be asked for one byte at a\n\
                         time. Do not use any special characters. Only\n\
                         strings consisting of 0s and 1s, of maximum length\n\
                         8, are allowed.",
@@ -323,10 +338,21 @@ fn main() {
                     );
                     println!("EXAMPLE:");
                     println!("Please provide byte 0:");
-                    println!("01001110");
+                    println!("0b01001110");
+                    println!("EXAMPLE:");
+                    println!("Please provide byte 0:");
+                    println!("0xa9");
                     println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                     let mut i = 0;
                     while i < plain_data.security_size {
+                        let mut in_binary = "".to_string();
+                        for character in &plain_data.security0 {
+                            in_binary += &format!("0{:08b} ", character);
+                        }
+                        println!(
+                            "SECURITY0 bytes already provided (in binary notation): {}",
+                            in_binary
+                        );
                         println!(
                             "SECURITY0 bytes already provided (in hex notation): {:x?}",
                             plain_data.security0
@@ -337,22 +363,18 @@ fn main() {
                             "[ {:?} ] String captured. string: {}",
                             Security0Input, parsed
                         );
-                        if parsed.len() > 8 {
-                            error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                        } else {
-                            match u8::from_str_radix(&parsed, 2) {
-                                Err(e) => {
-                                    error!("Not a valid bitstring! Try again!");
-                                    debug!("[ {:?} ] Error: {}", Security0Input, e);
-                                }
-                                Ok(result) => {
-                                    plain_data.security0.push(result);
-                                    debug!(
-                                        "[ {:?} ] New valued pushed.: {}",
-                                        Security0Input, result
-                                    );
-                                    i += 1;
-                                }
+                        match parse::<u8>(&parsed) {
+                            Err(e) => {
+                                error!("Not a valid bitstring! Try again!");
+                                debug!("[ {:?} ] Error: {}", Security0Input, e);
+                            }
+                            Ok(result) => {
+                                plain_data.security0.push(result);
+                                debug!(
+                                    "[ {:?} ] New valued pushed.: {}",
+                                    Security0Input, result
+                                );
+                                i += 1;
                             }
                         }
                     }
@@ -377,7 +399,8 @@ fn main() {
                     "Please enter the SECURITY1 bitstring. This is the\n\
                       bitstring of security parameters when the measured\n\
                       bit is 1. You will need to provide {} bytes, in\n\
-                      binary form. You will be asked for one byte at a\n\
+                      decimal, hex or binary form using the standard prefixes\n\
+                      (none,0x,0b). You will be asked for one byte at a\n\
                       time. Do not use any special characters. Only\n\
                       strings consisting of 0s and 1s, of maximum length\n\
                       8, are allowed.",
@@ -385,10 +408,21 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < plain_data.security_size {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.security1 {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "SECURITY1 bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "SECURITY1 bytes already provided (in hex notation): {:x?}",
                         plain_data.security1
@@ -399,19 +433,15 @@ fn main() {
                         "[ {:?} ] String captured. string: {}",
                         Security1Input, parsed
                     );
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ {:?} ] Error: {}", Security1Input, e);
-                            }
-                            Ok(result) => {
-                                plain_data.security1.push(result);
-                                debug!("[ {:?} ] New valued pushed.: {}", Security1Input, result);
-                                i += 1;
-                            }
+                    match parse::<u8>(&parsed) {
+                        Err(e) => {
+                            error!("Not a valid bitstring! Try again!");
+                            debug!("[ {:?} ] Error: {}", Security1Input, e);
+                        }
+                        Ok(result) => {
+                            plain_data.security1.push(result);
+                            debug!("[ {:?} ] New valued pushed.: {}", Security1Input, result);
+                            i += 1;
                         }
                     }
                 }

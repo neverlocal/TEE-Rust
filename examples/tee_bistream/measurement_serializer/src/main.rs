@@ -7,6 +7,7 @@ extern crate text_io;
 // Serializatin stuff
 use hex;
 use serde::{Serialize, Serializer};
+use parse_int::parse;
 
 // Data structure holding all the needed params in one place.
 #[derive(Serialize)]
@@ -82,42 +83,71 @@ fn main() {
                           that the TEE-Rust Esp32c6 example can acquire."
                 );
                 state_machine = SizeInput;
-                debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", FirstDialog);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'SizeInput'.",
+                    FirstDialog
+                );
             }
             SizeInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for total number of bytes.", SizeInput);
+                debug!(
+                    "[ {:?} ] Displaying request for total number of bytes.",
+                    SizeInput
+                );
                 println!("Enter the total number of classical bytes to recover:");
                 let parsed: String = read!("{}\n");
                 debug!("[ {:?} ] String captured. string: {}", SizeInput, parsed);
                 match parsed.parse::<usize>() {
                     Ok(output) => {
-                        debug!("[ {:?} ] String parsed correctly. output: {}", SizeInput, output);
+                        debug!(
+                            "[ {:?} ] String parsed correctly. output: {}",
+                            SizeInput, output
+                        );
                         total_size = output;
-                        debug!("[ {:?} ] secret_size assigned value: {}", SizeInput, total_size);
+                        debug!(
+                            "[ {:?} ] secret_size assigned value: {}",
+                            SizeInput, total_size
+                    );
                         state_machine = OutcomesInput;
-                        debug!("[ {:?} ] Protocol transitioned to state 'OutcomesInput'.", SizeInput)
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'OutcomesInput'.",
+                            SizeInput
+                        )
                     }
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
-                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SizeInput, e);
+                        debug!(
+                            "[ {:?} ] String parsed incorrectly. Error: {}",
+                            SizeInput, e
+                        );
                         total_size = 0;
                         debug!(
                             "[ {:?} ] secret_size wiped. secret_size: {}",
                             SizeInput,
                             total_size
                         );
-                        debug!("[ {:?} ] Protocol transitioned to state 'SizeInput'.", SizeInput);
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'SizeInput'.",
+                            SizeInput
+                        );
                     }
                 }
             }
             OutcomesInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for orderings bitstring.", OutcomesInput);
-                debug!("[ {:?} ] total_size set to {}", OutcomesInput, 2 * total_size);
+                debug!(
+                    "[ {:?} ] Displaying request for orderings bitstring.",
+                    OutcomesInput
+                );
+                debug!(
+                    "[ {:?} ] total_size set to {}",
+                    OutcomesInput,
+                    2 * total_size
+                );
                 println!(
                     "Please enter the MEASUREMENT OUTCOME bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
+                          to provide {} bytes, in decimal, hex or binary form using\n\
+                          the standard prefixes (none,0x,0b). You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
@@ -125,21 +155,32 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < (2 * total_size) {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.outcomes {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "OUTCOME bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "OUTCOME bytes already provided (in hex notation): {:x?}",
                         plain_data.outcomes
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", OutcomesInput, parsed);
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        OutcomesInput, parsed
+                    );
+                        match parse::<u8>(&parsed) {
                             Err(e) => {
                                 error!("Not a valid bitstring! Try again!");
                                 debug!("[ {:?} ] Error: {}", OutcomesInput, e);
@@ -150,7 +191,6 @@ fn main() {
                                 i += 1;
                             }
                         }
-                    }
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. orderings: {:x?}",
@@ -158,7 +198,10 @@ fn main() {
                     plain_data.outcomes
                 );
                 state_machine = Output;
-                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", OutcomesInput);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Output'.", 
+                    OutcomesInput
+                );
             }
             Output => {
                 println!("--------------------------------------------------");

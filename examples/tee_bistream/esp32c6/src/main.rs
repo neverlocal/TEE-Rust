@@ -9,6 +9,7 @@ fn your_program_here(_program_input: &Vec<u8>) -> Vec<u8> {
     return vec![0; 0];
 }
 
+
 //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
 
@@ -32,18 +33,7 @@ use core::cell::{RefCell, Cell};
 use critical_section::{CriticalSection, Mutex};
 
 use esp_hal::{
-    gpio::{Event, Input, Io, Level, Output, Pull},
-    interrupt::InterruptConfigurable,
-    handler,
-    ram,
-    clock::CpuClock, // Set CPU clock
-    time::{self, Duration, Instant}, // Needed to manipulate watchogs
-    peripherals::TIMG0, // Needed to manipulate watchogs
-    timer::timg::{MwdtStage, TimerGroup, Wdt}, // Needed to manipulate watchogs
-    usb_serial_jtag::UsbSerialJtag, // Needed to communicate over USB
-    sha::{Sha, Sha256}, // Hashing
-    aes::{Aes, Mode},       // AES ecnryption-decryption scheme
-    main,
+    aes::{Aes, Mode}, clock::CpuClock, gpio::{Event, Input, Io, Level, Output, Pull}, handler, interrupt::InterruptConfigurable, main, peripherals::TIMG0, ram, sha::{Sha, Sha256}, time::{self, Duration, Instant}, timer::timg::{MwdtStage, TimerGroup, Wdt}, usb_serial_jtag::UsbSerialJtag
 };
 
 use nb::block; // Needed for hashing
@@ -72,16 +62,16 @@ fn read_nth_bit(byte: u8, bit: usize) -> bool {
 // Sets nth bit of a byte.
 fn write_nth_bit(byte: u8, bit: usize, value: bool) -> u8 {
     let mask: u8 = 1 << (7 - bit);
-    debug!("byte: 0b{:08b}", byte);
-    debug!("mask: 0b{:08b}", mask);
-    debug!("value: 0b{:08b}", value);
+    trace!("byte: 0b{:08b}", byte);
+    trace!("mask: 0b{:08b}", mask);
+    trace!("value: 0b{:08b}", value);
     let result: u8;
     if value {
         result = byte | mask;
-        debug!("New byte: 0b{:08b}", result);
+        trace!("New byte: 0b{:08b}", result);
     } else {
         result = byte & !mask;
-        debug!("New byte: 0b{:08b}", result);
+        trace!("New byte: 0b{:08b}", result);
     }
     return result;
 }
@@ -434,9 +424,12 @@ fn stop_cycle(cs: CriticalSection<'_>) {
 fn see_herald(cs: CriticalSection<'_>) {
         if !RECEIVING_STATUS.borrow(cs).get() || HERALD_LOCKED.borrow(cs).get()
         {
+            debug!( "[ see_herald ] triggered at the wrong time." );
             return
         } else {
+            debug!( "[ see_herald ] triggered at the right time." );
             HERALD_TIME.borrow(cs).set(time::now());
+            debug!( "[ see_herald ] herald_time: {:?}", HERALD_TIME.borrow(cs).get().ticks() );
             HERALD_SEEN.borrow(cs).set(true);
         }
 }
@@ -447,12 +440,15 @@ fn see_herald(cs: CriticalSection<'_>) {
 // within a pre-defined time window based on the time delays expected from the quantum HW setup.
 #[ram] //Placed in RAM for faster execution
 fn see_outcome0(cs: CriticalSection<'_>) {
-    if !(RECEIVING_STATUS.borrow(cs).get() && HERALD_SEEN.borrow(cs).get())
+    if !RECEIVING_STATUS.borrow(cs).get() || !HERALD_SEEN.borrow(cs).get()
         {
+            debug!( "[ see_outcome0 ] triggered at the wrong time." );
             return
         } else {
+            debug!( "[ see_outcome0 ] triggered at the right time." );
             let delay: Duration = time::now() - HERALD_TIME.borrow(cs).get();
             if delay.ticks() >= MIN_OUTCOME_DELAY_US && delay.ticks() <= MAX_OUTCOME_DELAY_US {
+                debug!( "[ see_outcome0 ] delay: {:?}", delay.ticks() );
                 HERALD_LOCKED.borrow(cs).set(true);
                 OUTCOME0_SEEN.borrow(cs).set(true);
             }
@@ -466,11 +462,14 @@ fn see_outcome0(cs: CriticalSection<'_>) {
 #[ram] //Placed in RAM for faster execution
 fn see_outcome1(cs: CriticalSection<'_>) {
     //if (!CYCLE.borrow())
-        if RECEIVING_STATUS.borrow(cs).get() && HERALD_SEEN.borrow(cs).get() {
+        if !RECEIVING_STATUS.borrow(cs).get() || !HERALD_SEEN.borrow(cs).get() {
+            debug!( "[ see_outcome1 ] triggered at the wrong time." );
             return
         } else {
+            debug!( "[ see_outcome1 ] triggered at the right time." );
             let delay: Duration = time::now() - HERALD_TIME.borrow(cs).get();
             if delay.ticks() >= MIN_OUTCOME_DELAY_US && delay.ticks() <= MAX_OUTCOME_DELAY_US {
+                debug!( "[ see_outcome1 ] delay: {:?}", delay.ticks() );
                 HERALD_LOCKED.borrow(cs).set(true);
                 OUTCOME1_SEEN.borrow(cs).set(true);
             }
@@ -508,9 +507,9 @@ fn main() -> ! {
     info!("Initializing pins.");    
     let mut io = Io::new(peripherals.IO_MUX);
     io.set_interrupt_handler(handler);
-
-    let mut running_pin = Output::new(peripherals.GPIO20, Level::Low);
-    let mut basis_select_pin = Output::new(peripherals.GPIO14, Level::Low);
+    
+    let mut running_pin = Output::new(peripherals.GPIO20, Level::Low);    
+    let mut basis_select_pin = Output::new(peripherals.GPIO19, Level::Low);
     let receiving_pin = Input::new(peripherals.GPIO21, Pull::Up);
     let herald_pin = Input::new(peripherals.GPIO22, Pull::Up);
     let outcome0_pin = Input::new(peripherals.GPIO16, Pull::Up);
@@ -551,7 +550,7 @@ fn main() -> ! {
     let mut usb_serial = UsbSerialJtag::new(peripherals.USB_DEVICE);
     info!("JTAG interface initialized.");
     let mut buffer: Vec<u8> = alloc::vec![0;0];
-    info!("Consol buffer initialized.");
+    info!("Console buffer initialized.");
 
     //////////////////
     // CRYPTOGRAPHY //
@@ -566,7 +565,7 @@ fn main() -> ! {
         ComputeSecret, MeasurementDialog, MeasurementInput, PreparationDialog, PreparationInput,
         ProgramDialog, ProgramInput, RunProgram,
     };
-    let mut state_machine = MeasurementDialog;
+    let mut state_machine = ProgramDialog;
     info!("Protocol state machine initialized.");
 
     //////////////////////
@@ -736,7 +735,8 @@ fn main() -> ! {
                     program_input = buffer.to_vec();
                     debug!("[ {:?} ] program_input assigned", ProgramInput);
                     println!("[ PROGRAM INPUT ] Computing program input hash");
-                    program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
+                    //program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
+                    program_hash = hash256(buffer, &mut sha)[0..8].to_vec();
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
@@ -749,7 +749,8 @@ fn main() -> ! {
                               basis for the quantum measurement. These are:"
                     );
                     println!("");
-                    println!("{=[u8]:b}", program_hash);
+                    println!("{=[u8]:08b}", program_hash);
+                    println!("{=[u8]:x}", program_hash);
                     println!("");
                     wdt = watchdog_feed(wdt, MeasurementInput);
                     state_machine = MeasurementDialog;
@@ -770,11 +771,11 @@ fn main() -> ! {
                     "[ {:?} ] Defining outcomes and success vectors.",
                     MeasurementInput
                 );
-                let mut outcomes: Vec<u8> = vec![0,0];
-                let mut success: Vec<u8> = vec![0,0];
+                let mut outcomes: Vec<u8> = vec![];
+                let mut success: Vec<u8> = vec![];
                 let mut outcomes_byte: u8 = 0;
                 let mut success_byte: u8 = 0;
-
+                let mut next_cycle = 0;
                 // We set up and start the acquisition here
                 critical_section::with(|initialize_sec| {
                     // Attach interrupts
@@ -791,15 +792,34 @@ fn main() -> ! {
                     let mut outcome1_pin = OUTCOME1_PIN.borrow_ref_mut(initialize_sec);
                     let outcome1_pin = outcome1_pin.as_mut().unwrap();
                     let cycle = CYCLE.borrow(initialize_sec);
+                    debug!(
+                        "[ {:?} ] Interrupts attached.",
+                        MeasurementInput
+                    );
                     cycle.set(0);
+                    debug!(
+                        "[ {:?} ] Cycle: {:?}.",
+                        MeasurementInput,
+                        cycle.get()
+                    );
                     receiving_pin.listen(Event::AnyEdge);
                     herald_pin.listen(Event::RisingEdge);
                     outcome0_pin.listen(Event::RisingEdge);
                     outcome1_pin.listen(Event::RisingEdge);
+                    debug!(
+                        "[ {:?} ] Setting basis.",
+                        MeasurementInput
+                    );
                     set_basis(initialize_sec, &mut basis_select_pin, read_nth_bit(program_hash[0], 0));
+                    debug!(
+                        "[ {:?} ] Basis: {:?}.",
+                        MeasurementInput,
+                        read_nth_bit(program_hash[cycle.get()/16], cycle.get()/2 % 8)
+                    );
                     running_pin.set_high();
                 });
-                while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < preparation.total_size }) {
+                //while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < preparation.total_size }) {
+                while critical_section::with(|initialize_sec| { CYCLE.borrow(initialize_sec).get() < 127 }) {
                     critical_section::with(|while_sec| {
                         // If we're not receiving, a whole cycle has completed and
                         // We can store values.
@@ -809,57 +829,97 @@ fn main() -> ! {
                                 MeasurementInput
                             );
                             let cycle = CYCLE.borrow(while_sec).get();
-                            trace!(
-                                "[ {:?} ] Cycle: {:?}.",
-                                MeasurementInput,
-                                cycle
-                            );
-                            if cycle % 8 == 0 {
-                                trace!(
-                                    "[ {:?} ] New byte started.",
-                                    MeasurementInput
-                                );
-                                outcomes_byte = 0;
-                                success_byte = 0;
-                            } else {
-                                trace!(
-                                    "[ {:?} ] Modifying byte in the outcome/success vector.",
-                                    MeasurementInput
-                                );
-                                outcomes_byte = outcomes.pop().unwrap();
-                                success_byte = success.pop().unwrap();
-                            }
-                            let herald_seen = HERALD_SEEN.borrow(while_sec);
-                            let outcome0_seen = OUTCOME0_SEEN.borrow(while_sec);
-                            let outcome1_seen = OUTCOME1_SEEN.borrow(while_sec);
-                            if herald_seen.get() && (outcome0_seen.get() ^ outcome1_seen.get()) {
-                                write_nth_bit(outcomes_byte, cycle % 8 , outcome1_seen.get());
-                                write_nth_bit(success_byte, cycle % 8 , true);
-                            } else {
-                                write_nth_bit(success_byte, cycle % 8, false);
-                            }
-                            trace!(
-                                "[ {:?} ] outcomes: {:?}.",
-                                MeasurementInput,
-                                outcomes
-                            );
-                            trace!(
-                                "[ {:?} ] success: {:?}.",
-                                MeasurementInput,
-                                success
-                            );
-                            // Here we change basis every couple of qubits measured.
-                            if cycle % 2 == 0 {
-                                trace!(
-                                    "[ {:?} ] Chainging basis.",
-                                    MeasurementInput
-                                );
-                                trace!(
-                                    "[ {:?} ] Basis: {:?}.",
+                            if cycle == next_cycle {
+                                debug!(
+                                    "[ {:?} ] Cycle: {:?}.",
                                     MeasurementInput,
-                                    read_nth_bit(program_hash[cycle/16], cycle/2 % 8)
+                                    cycle
                                 );
-                                set_basis(while_sec, &mut basis_select_pin, read_nth_bit(program_hash[cycle/16], cycle/2 % 8));
+                                next_cycle += 1;
+                                if cycle % 8 == 0 {
+                                    debug!(
+                                        "[ {:?} ] New byte started.",
+                                        MeasurementInput
+                                    );
+                                    outcomes_byte = 0;
+                                    success_byte = 0;
+                                } else {
+                                    debug!(
+                                        "[ {:?} ] Modifying byte in the outcome/success vector.",
+                                        MeasurementInput
+                                    );
+                                    outcomes_byte = outcomes.pop().unwrap();
+                                    success_byte = success.pop().unwrap();
+                                    debug!(
+                                        "[ {:?} ] outcomes_byte: 0b{:08b}.",
+                                        MeasurementInput,
+                                        outcomes_byte
+                                    );
+                                    debug!(
+                                        "[ {:?} ] success_byte: 0b{:08b}.",
+                                        MeasurementInput,
+                                        success_byte
+                                    );
+                                }
+                                let herald_seen = HERALD_SEEN.borrow(while_sec);
+                                let outcome0_seen = OUTCOME0_SEEN.borrow(while_sec);
+                                let outcome1_seen = OUTCOME1_SEEN.borrow(while_sec);
+                                if herald_seen.get() && (outcome0_seen.get() ^ outcome1_seen.get()) {
+                                    outcomes_byte = write_nth_bit(outcomes_byte, cycle % 8 , outcome1_seen.get());
+                                    success_byte = write_nth_bit(success_byte, cycle % 8 , true);
+                                } else {
+                                    success_byte = write_nth_bit(success_byte, cycle % 8, false);
+                                }
+                                debug!(
+                                    "[ {:?} ] herald_seen: {:?}.",
+                                    MeasurementInput,
+                                    herald_seen
+                                );
+                                debug!(
+                                    "[ {:?} ] outcome0_seen: {:?}.",
+                                    MeasurementInput,
+                                    outcome0_seen
+                                );
+                                debug!(
+                                    "[ {:?} ] outcome1_seen: {:?}.",
+                                    MeasurementInput,
+                                    outcome1_seen
+                                );
+                                debug!(
+                                    "[ {:?} ] outcomes_byte: 0b{:08b}.",
+                                    MeasurementInput,
+                                    outcomes_byte
+                                );
+                                debug!(
+                                    "[ {:?} ] success_byte: 0b{:08b}.",
+                                    MeasurementInput,
+                                    success_byte
+                                );
+                                outcomes.push(outcomes_byte);
+                                success.push(success_byte);
+                                debug!(
+                                    "[ {:?} ] outcomes: {=[u8]:08b}.", 
+                                    MeasurementInput,
+                                    outcomes
+                                );
+                                debug!(
+                                    "[ {:?} ] success: {=[u8]:08b}.",
+                                    MeasurementInput,
+                                    success
+                                );
+                                // Here we change basis every couple of qubits measured.
+                                if cycle % 2 == 0 {
+                                    debug!(
+                                        "[ {:?} ] Chainging basis.",
+                                        MeasurementInput
+                                    );
+                                    debug!(
+                                        "[ {:?} ] Basis: {:?}.",
+                                        MeasurementInput,
+                                        read_nth_bit(program_hash[cycle/16], cycle/2 % 8)
+                                    );
+                                    set_basis(while_sec, &mut basis_select_pin, read_nth_bit(program_hash[cycle/16], cycle/2 % 8));
+                                }
                             }
                         }
                     });
@@ -886,12 +946,12 @@ fn main() -> ! {
                     running_pin.set_low();
                 });                
                 debug!(
-                    "[ {:?} ] outcomes: {:?}.",
+                    "[ {:?} ] outcomes: {=[u8]:08b}.",
                     MeasurementInput,
                     outcomes
                 );
                 debug!(
-                    "[ {:?} ] success: {:?}.",
+                    "[ {:?} ] success: {=[u8]:08b}.",
                     MeasurementInput,
                     success
                 );
@@ -907,15 +967,15 @@ fn main() -> ! {
                             "[ {:?} ] Measurement struct assigned.",
                             MeasurementInput
                         );
-                        state_machine = ComputeSecret;
-                        dbg_state_transition(MeasurementInput, ComputeSecret);
+                        // state_machine = ComputeSecret;
+                        // dbg_state_transition(MeasurementInput, ComputeSecret);
                     }
                     Err(e) => {
                         error!("[ MEASUREMENT ] Information validation failed with error:\n      \
                                 {:?}. \
                                 Please retry.", e);
-                        state_machine = MeasurementDialog;
-                        dbg_state_transition(MeasurementInput, MeasurementDialog);
+                        // state_machine = MeasurementDialog;
+                        // dbg_state_transition(MeasurementInput, MeasurementDialog);
                     }
                 }
                 program_hash.zeroize();

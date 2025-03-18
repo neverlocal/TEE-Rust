@@ -3,24 +3,24 @@ const SHARED_SECRET: &[u8] = "SUp4SeCp@sSw0rd".as_bytes();
 
 // Logging facilities
 use env_logger;
-use log::{trace, debug, warn, error};
+use log::{debug, error, warn, trace};
 // Easy read from console
 #[macro_use]
 extern crate text_io;
 // Serialization stuff
 use hex;
 use serde::{Serialize, Serializer};
+use parse_int::parse;
 // Rewrite memory locations with 0s after drop, useful for security reasons
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // Cryptography
-use sha2::{Sha256, Digest};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes256;
-use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit};
+use sha2::{Digest, Sha256};
 
 // Our library!
 use conjugate_coding::{self, conjugate_coding::ConjugateCodingPrepare};
-
 
 //////////////////
 // CRYPTOGRAPHY //
@@ -38,7 +38,7 @@ fn hash256(buffer: &[u8]) -> [u8; 32] {
 #[allow(dead_code)]
 enum Mode {
     Encryption256,
-    Decryption256
+    Decryption256,
 }
 fn aes256(buffer: Vec<u8>, mode: Mode) -> Vec<u8> {
     let keybuf = hash256(SHARED_SECRET).into();
@@ -145,7 +145,14 @@ enum StateMachine {
 }
 
 fn main() {
-    use StateMachine::{FirstDialog, SecurityInput, OrderingsInput, Security0Input, Security1Input, Output};
+    use StateMachine::{
+        FirstDialog,
+        SecurityInput,
+        OrderingsInput,
+        Security0Input,
+        Security1Input,
+        Output,
+    };
     std::env::set_var("RUST_LOG", "warn"); // Set the logging level
     env_logger::builder()
         .format_target(false)
@@ -175,7 +182,7 @@ fn main() {
                           relevant preparation data, and print them in a way\n\
                           that the TEE-Rust Esp32c6 example can acquire."
                 );
-                warn!(  
+                warn!(
                     "The current utility uses AES to exchange preparation\n    \
                        results. This is insecure for a lot of reasons. At the\n    \
                        bare minimum, we would like to have a MAC on top of it\n    \
@@ -187,25 +194,39 @@ fn main() {
                        only. Use at your own risk!"
                 );
                 state_machine = SecurityInput;
-                debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", FirstDialog);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'SecurityInput'.",
+                    FirstDialog
+                );
             }
             SecurityInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for security bytes.", SecurityInput);
+                debug!(
+                    "[ {:?} ] Displaying request for security bytes.",
+                    SecurityInput
+                );
                 println!("Enter the number of security bytes:");
                 let parsed: String = read!("{}\n");
-                debug!("[ {:?} ] String captured. string: {}", SecurityInput, parsed);
+                debug!(
+                    "[ {:?} ] String captured. string: {}",
+                    SecurityInput, parsed
+                );
                 match parsed.parse::<usize>() {
                     Err(e) => {
                         error!("Input is not a positive number! Please try again.");
-                        debug!("[ {:?} ] String parsed incorrectly. Error: {}", SecurityInput, e);
+                        debug!(
+                            "[ {:?} ] String parsed incorrectly. Error: {}",
+                            SecurityInput, e
+                        );
                         plain_data.security_size = 0;
                         debug!(
                             "[ {:?} ] security_size wiped. security_size: {}",
-                            SecurityInput,
-                            plain_data.security_size
+                            SecurityInput, plain_data.security_size
                         );
-                        debug!("[ {:?} ] Protocol transitioned to state 'SecurityInput'.", SecurityInput);
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'SecurityInput'.",
+                            SecurityInput
+                        );
                     }
                     Ok(output) => {
                         debug!(
@@ -215,20 +236,26 @@ fn main() {
                         plain_data.security_size = output;
                         debug!(
                             "[ {:?} ] security_size assigned value: {}",
-                            SecurityInput,
-                            plain_data.security_size
+                            SecurityInput, plain_data.security_size
                         );
                         state_machine = OrderingsInput;
-                        debug!("[ {:?} ] Protocol transitioned to state 'OrderingsInput'.", SecurityInput)
+                        debug!(
+                            "[ {:?} ] Protocol transitioned to state 'OrderingsInput'.",
+                            SecurityInput
+                        )
                     }
                 }
             }
             OrderingsInput => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for orderings bitstring.", OrderingsInput);
+                debug!(
+                    "[ {:?} ] Displaying request for orderings bitstring.",
+                    OrderingsInput
+                );
                 println!(
                     "Please enter the ORDERINGS bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
+                          to provide {} bytes, in decimal, hex or binary form using\n\
+                          the standard prefixes (none,0x,0b). You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
@@ -236,55 +263,74 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < plain_data.security_size {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.orderings {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "ORDERINGS bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "ORDERINGS bytes already provided (in hex notation): {:x?}",
                         plain_data.orderings
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", OrderingsInput, parsed);
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ {:?} ] Error: {}", OrderingsInput, e);
-                            }
-                            Ok(result) => {
-                                plain_data.orderings.push(result);
-                                debug!("[ {:?} ] New valued pushed.: {}", OrderingsInput, result);
-                                i += 1;
-                            }
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        OrderingsInput, parsed
+                    );
+                    match parse::<u8>(&parsed) {
+                        Err(e) => {
+                            error!("Not a valid bitstring! Try again!");
+                            debug!("[ {:?} ] Error: {}", OrderingsInput, e);
+                        }
+                        Ok(result) => {
+                            plain_data.orderings.push(result);
+                            debug!("[ {:?} ] New valued pushed.: {}", OrderingsInput, result);
+                            i += 1;
                         }
                     }
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. orderings: {:x?}",
-                    OrderingsInput,
-                    plain_data.orderings
+                    OrderingsInput, plain_data.orderings
                 );
                 state_machine = Security0Input;
-                debug!("[ {:?} ] Protocol transitioned to state 'Security0Input'.", OrderingsInput);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Security0Input'.",
+                    OrderingsInput
+                );
             }
             Security0Input => {
                 debug!("[ {:?} ] Checking size of security_size", Security0Input);
                 if plain_data.security_size == 0 {
                     state_machine = Output;
-                        debug!("[ {:?} ] security_size is 0. Protocol transitioned to state 'Output'.", Security0Input);
+                    debug!(
+                        "[ {:?} ] security_size is 0. Protocol transitioned to state 'Output'.",
+                        Security0Input
+                    );
                 } else {
                     debug!("[ {:?} ] security_size is bigger than 0.", Security0Input);
                     println!("--------------------------------------------------");
-                    debug!("[ {:?} ] Displaying request for security0 bitstring.", Security0Input);
+                    debug!(
+                        "[ {:?} ] Displaying request for security0 bitstring.",
+                        Security0Input
+                    );
                     println!(
                         "Please enter the SECURITY0 bitstring. This is the\n\
                         bitstring of security parameters when the measured\n\
                         bit is 0. You will need to provide {} bytes, in\n\
-                        binary form. You will be asked for one byte at a\n\
+                        decimal, hex or binary form using the standard prefixes\n\
+                        (none,0x,0b). You will be asked for one byte at a\n\
                         time. Do not use any special characters. Only\n\
                         strings consisting of 0s and 1s, of maximum length\n\
                         8, are allowed.",
@@ -292,50 +338,69 @@ fn main() {
                     );
                     println!("EXAMPLE:");
                     println!("Please provide byte 0:");
-                    println!("01001110");
+                    println!("0b01001110");
+                    println!("EXAMPLE:");
+                    println!("Please provide byte 0:");
+                    println!("0xa9");
                     println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                     let mut i = 0;
                     while i < plain_data.security_size {
+                        let mut in_binary = "".to_string();
+                        for character in &plain_data.security0 {
+                            in_binary += &format!("0{:08b} ", character);
+                        }
+                        println!(
+                            "SECURITY0 bytes already provided (in binary notation): {}",
+                            in_binary
+                        );
                         println!(
                             "SECURITY0 bytes already provided (in hex notation): {:x?}",
                             plain_data.security0
                         );
                         println!("Please provide byte {}:", i);
                         let parsed: String = read!("{}\n");
-                        debug!("[ {:?} ] String captured. string: {}", Security0Input, parsed);
-                        if parsed.len() > 8 {
-                            error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                        } else {
-                            match u8::from_str_radix(&parsed, 2) {
-                                Err(e) => {
-                                    error!("Not a valid bitstring! Try again!");
-                                    debug!("[ {:?} ] Error: {}", Security0Input, e);
-                                }
-                                Ok(result) => {
-                                    plain_data.security0.push(result);
-                                    debug!("[ {:?} ] New valued pushed.: {}", Security0Input, result);
-                                    i += 1;
-                                }
+                        debug!(
+                            "[ {:?} ] String captured. string: {}",
+                            Security0Input, parsed
+                        );
+                        match parse::<u8>(&parsed) {
+                            Err(e) => {
+                                error!("Not a valid bitstring! Try again!");
+                                debug!("[ {:?} ] Error: {}", Security0Input, e);
+                            }
+                            Ok(result) => {
+                                plain_data.security0.push(result);
+                                debug!(
+                                    "[ {:?} ] New valued pushed.: {}",
+                                    Security0Input, result
+                                );
+                                i += 1;
                             }
                         }
                     }
                     debug!(
                         "[ {:?} ] Exited while loop. security0: {:x?}",
-                        Security0Input,
-                        plain_data.security0
+                        Security0Input, plain_data.security0
                     );
                     state_machine = Security1Input;
-                    debug!("[ {:?} ] Protocol transitioned to state 'Security1Input'.", Security0Input);
+                    debug!(
+                        "[ {:?} ] Protocol transitioned to state 'Security1Input'.",
+                        Security0Input
+                    );
                 }
             }
             Security1Input => {
                 println!("--------------------------------------------------");
-                debug!("[ {:?} ] Displaying request for security1 bitstring.", Security1Input);
+                debug!(
+                    "[ {:?} ] Displaying request for security1 bitstring.",
+                    Security1Input
+                );
                 println!(
                     "Please enter the SECURITY1 bitstring. This is the\n\
                       bitstring of security parameters when the measured\n\
                       bit is 1. You will need to provide {} bytes, in\n\
-                      binary form. You will be asked for one byte at a\n\
+                      decimal, hex or binary form using the standard prefixes\n\
+                      (none,0x,0b). You will be asked for one byte at a\n\
                       time. Do not use any special characters. Only\n\
                       strings consisting of 0s and 1s, of maximum length\n\
                       8, are allowed.",
@@ -343,40 +408,52 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < plain_data.security_size {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.security1 {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "SECURITY1 bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "SECURITY1 bytes already provided (in hex notation): {:x?}",
                         plain_data.security1
                     );
                     println!("Please provide byte {}:", i);
                     let parsed: String = read!("{}\n");
-                    debug!("[ {:?} ] String captured. string: {}", Security1Input, parsed);
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ {:?} ] Error: {}", Security1Input, e);
-                            }
-                            Ok(result) => {
-                                plain_data.security1.push(result);
-                                debug!("[ {:?} ] New valued pushed.: {}", Security1Input, result);
-                                i += 1;
-                            }
+                    debug!(
+                        "[ {:?} ] String captured. string: {}",
+                        Security1Input, parsed
+                    );
+                    match parse::<u8>(&parsed) {
+                        Err(e) => {
+                            error!("Not a valid bitstring! Try again!");
+                            debug!("[ {:?} ] Error: {}", Security1Input, e);
+                        }
+                        Ok(result) => {
+                            plain_data.security1.push(result);
+                            debug!("[ {:?} ] New valued pushed.: {}", Security1Input, result);
+                            i += 1;
                         }
                     }
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. security1: {:x?}",
-                    Security1Input,
-                    plain_data.security1
+                    Security1Input, plain_data.security1
                 );
                 state_machine = Output;
-                debug!("[ {:?} ] Protocol transitioned to state 'Output'.", Security1Input);
+                debug!(
+                    "[ {:?} ] Protocol transitioned to state 'Output'.",
+                    Security1Input
+                );
             }
             Output => {
                 println!("--------------------------------------------------");
@@ -385,7 +462,7 @@ fn main() {
                     "Thank you for having provided all the needed\n\
                         information. I will need a second to validate it."
                 );
-                match ConjugateCodingPrepare::new_plaintext(
+                match ConjugateCodingPrepare::from_plaintext(
                     0,
                     plain_data.security_size,
                     plain_data.orderings.clone(),

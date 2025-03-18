@@ -7,6 +7,7 @@ extern crate text_io;
 // Serializatin stuff
 use hex;
 use serde::{Serialize, Serializer};
+use parse_int::parse;
 
 // Data structure holding all the needed params in one place.
 #[derive(Serialize)]
@@ -122,7 +123,8 @@ fn main() {
                         total_size = 0;
                         debug!(
                             "[ {:?} ] secret_size wiped. secret_size: {}",
-                            SizeInput, total_size
+                            SizeInput,
+                            total_size
                         );
                         debug!(
                             "[ {:?} ] Protocol transitioned to state 'SizeInput'.",
@@ -144,7 +146,8 @@ fn main() {
                 );
                 println!(
                     "Please enter the MEASUREMENT OUTCOME bitstring. You will need\n\
-                          to provide {} bytes, in binary form. You will be\n\
+                          to provide {} bytes, in decimal, hex or binary form using\n\
+                          the standard prefixes (none,0x,0b). You will be\n\
                           asked for one byte at a time. Do not use any special\n\
                           characters. Only strings consisting of 0s and 1s, of\n\
                           maximum length 8, are allowed.",
@@ -152,10 +155,21 @@ fn main() {
                 );
                 println!("EXAMPLE:");
                 println!("Please provide byte 0:");
-                println!("01001110");
+                println!("0b01001110");
+                println!("EXAMPLE:");
+                println!("Please provide byte 0:");
+                println!("0xa9");
                 println!("-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~");
                 let mut i = 0;
                 while i < (2 * total_size) {
+                    let mut in_binary = "".to_string();
+                    for character in &plain_data.outcomes {
+                        in_binary += &format!("0{:08b} ", character);
+                    }
+                    println!(
+                        "OUTCOME bytes already provided (in binary notation): {}",
+                        in_binary
+                    );
                     println!(
                         "OUTCOME bytes already provided (in hex notation): {:x?}",
                         plain_data.outcomes
@@ -166,25 +180,22 @@ fn main() {
                         "[ {:?} ] String captured. string: {}",
                         OutcomesInput, parsed
                     );
-                    if parsed.len() > 8 {
-                        error!("Maximum number of characters per string is 8, you entered {}. Try again!", parsed.len());
-                    } else {
-                        match u8::from_str_radix(&parsed, 2) {
-                            Err(e) => {
-                                error!("Not a valid bitstring! Try again!");
-                                debug!("[ {:?} ] Error: {}", OutcomesInput, e);
-                            }
-                            Ok(result) => {
-                                plain_data.outcomes.push(result);
-                                debug!("[ {:?} ] New valued pushed.: {}", OutcomesInput, result);
-                                i += 1;
-                            }
+                    match parse::<u8>(&parsed) {
+                        Err(e) => {
+                            error!("Not a valid bitstring! Try again!");
+                            debug!("[ {:?} ] Error: {}", OutcomesInput, e);
+                        }
+                        Ok(result) => {
+                            plain_data.outcomes.push(result);
+                            debug!("[ {:?} ] New valued pushed.: {}", OutcomesInput, result);
+                            i += 1;
                         }
                     }
                 }
                 debug!(
                     "[ {:?} ] Exited while loop. orderings: {:x?}",
-                    OutcomesInput, plain_data.outcomes
+                    OutcomesInput,
+                    plain_data.outcomes
                 );
                 state_machine = Output;
                 debug!(

@@ -23,3 +23,4 @@ hex = "0.4"
 
 # Conjugate coding
 conjugate_coding = { path = "../../../conjugate_coding_library", features = [ "std" ] }
+parse_int = "0.6.0"
