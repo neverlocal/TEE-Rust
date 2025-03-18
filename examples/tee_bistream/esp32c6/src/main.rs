@@ -999,7 +999,7 @@ fn main() -> ! {
             ComputeSecret => {
                 println!("======================================================================");
                 println!("[ RESULT ] I'm now using the information provided to compute a result.");
-                match ConjugateCodingResult::new(&preparation, &measurement, 4) {
+                match ConjugateCodingResult::new(&preparation, &measurement, 1) {
                     Err(e) => {
                         error!(
                             "[ RESULT ] Result computation hasn't passed security validation: {:?}",
