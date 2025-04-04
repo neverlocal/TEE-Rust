@@ -19,42 +19,26 @@ extern crate alloc; // no_std requires a custom allocator
 use alloc::vec;
 use alloc::vec::Vec; // Needed for buffer manipulation
 
-use alloc::string::String;
 use hex::{self, decode};
-use serde::de::Error;
-
-use core::ptr::addr_of_mut; // Needed to initialize heap
 
 // Logging, printing etc.
 use defmt::{trace, debug, info, warn, error, println, Format};
 use esp_backtrace as _;
 use esp_println as _;
 
-// Variable handling in interrupts
-use core::cell::{RefCell, Cell};
-use critical_section::{CriticalSection, Mutex};
-
 use esp_hal::{
     aes::{Aes, Mode},
     clock::CpuClock,
     gpio::{Event, Input, InputConfig, Io, Level, Output, OutputConfig, Pull},
-    handler,
     main,
     peripherals::TIMG0,
-    ram,
-    sha::{Sha, Sha256},
-    time::{self, Duration, Instant},
+    sha::Sha,
+    time::Duration,
     timer::timg::{MwdtStage, TimerGroup, Wdt},
     usb_serial_jtag::UsbSerialJtag
 };
 
-use nb::block; // Needed for hashing
-
-use zeroize::{Zeroize, ZeroizeOnDrop}; // Rewrite memory locations with 0s after drop, useful for security reasons
-
-use core::result::Result; // Manipulate errors
-
-use serde::{Deserialize, Deserializer}; // We do like our JSON very much
+use zeroize::Zeroize; // Rewrite memory locations with 0s after drop, useful for security reasons
 
 // Finally the only meaningful thing in a sea of boilerplate
 use conjugate_coding::{
@@ -63,46 +47,25 @@ use conjugate_coding::{
     conjugate_coding::ConjugateCodingResult,
 };
 
-/////////////////////
-// BYTE OPERATIONS //
-/////////////////////
-// Checks if the n-th bit of a byte is 1.
-fn read_nth_bit(byte: u8, bit: usize) -> bool {
-    let mask: [u8; 8] = [128, 64, 32, 16, 8, 4, 2, 1];
-    byte & mask[bit] != 0
-}
-// Sets nth bit of a byte.
-fn write_nth_bit(byte: u8, bit: usize, value: bool) -> u8 {
-    let mask: u8 = 1 << (7 - bit);
-    trace!("byte: 0b{:08b}", byte);
-    trace!("mask: 0b{:08b}", mask);
-    trace!("value: 0b{:08b}", value);
-    let result: u8;
-    if value {
-        result = byte | mask;
-        trace!("New byte: 0b{:08b}", result);
-    } else {
-        result = byte & !mask;
-        trace!("New byte: 0b{:08b}", result);
-    }
-    return result;
-}
-
-////////////////
-// HEAP STUFF //
-////////////////
-// Function to initialize the heap memory
-fn init_heap() {
-    const HEAP_SIZE: usize = 128 * 1024;
-    static mut HEAP: core::mem::MaybeUninit<[u8; HEAP_SIZE]> = core::mem::MaybeUninit::uninit();
-    unsafe {
-        esp_alloc::HEAP.add_region(esp_alloc::HeapRegion::new(
-            addr_of_mut!(HEAP) as *mut u8,
-            HEAP_SIZE,
-            esp_alloc::MemoryCapability::Internal.into(),
-        ));
-    }
-}
+mod bit_ops;
+    use bit_ops::{read_nth_bit, write_nth_bit};
+mod heap_stuff;
+mod cryptography;
+mod conjugate_coding_helpers;
+mod serial_comms;
+mod interrupts;
+    use interrupts::{
+        HERALD_PIN, 
+        HERALD_SEEN, 
+        RECEIVING_PIN, 
+        RECEIVING_STATUS, 
+        OUTCOME0_PIN, 
+        OUTCOME0_SEEN, 
+        OUTCOME1_PIN, 
+        OUTCOME1_SEEN, 
+        CYCLE, 
+        set_basis
+    };
 
 //////////////
 // WATCHDOG //
@@ -113,133 +76,6 @@ fn watchdog_feed(mut wdt: Wdt<TIMG0>, state: StateMachine) -> Wdt<TIMG0> {
     debug!("[ {:?} ] Watchdog fed.", state);
     return wdt;
 }
-
-//////////////////
-// SERIAL COMMS //
-//////////////////
-// Reads from serial and returns a buffer object
-fn store_serial_buffer<'a>(
-    buffer: &'a mut Vec<u8>,
-    usb_serial: &mut UsbSerialJtag<'_, esp_hal::Blocking>,
-) -> &'a mut Vec<u8> {
-    while let Result::Ok(c) = usb_serial.read_byte() {
-        //trace!("Old Buffer: {=[u8]:x}", buffer);
-        match c {
-            0x0..0x4 | 0x05..0x08 | 0x9..0x0D | 0x0F..=0x1F | 0x80..=0xff => trace!(
-                "[ store_serial_buffer ] Special char {:x} detected. Doing nothing.",
-                c
-            ),
-            0x4 => {
-                trace!("[ store_serial_buffer ] Special char {:x} (EOT) detected. Pushing into buffer and returning.", c);
-                buffer.push(c); // Push char into buffer
-            }
-            0x8 => {
-                trace!(
-                    "[ store_serial_buffer ] Special char {:x} (Backspace) detected.",
-                    c
-                );
-                match buffer.pop() {
-                    // Strip last char out of buffer
-                    Some(_x) => {
-                        trace!("[ store_serial_buffer ] Buffer was not empyt. Last char in buffer cleared.");
-                        let _ = usb_serial.write_byte_nb(c); // Display: Cursor 1 to the left
-                        let _ = usb_serial.write_byte_nb(0x20); //Display: replace last char with space
-                        let _ = usb_serial.write_byte_nb(c); // Display: Cursor 1 to the left again
-                        usb_serial.flush_tx().ok();
-                    }
-                    None => trace!("[ store_serial_buffer ] Buffer was already empty!"),
-                }
-            }
-            0x0D => {
-                println!("");
-                trace!(
-                    "[ store_serial_buffer ] Special char {:x} (Newline) detected.",
-                    c
-                )
-            }
-            _ => {
-                trace!(
-                    "[ store_serial_buffer ] Char {:x} detected. Adding to buffer.",
-                    c
-                );
-                let _ = usb_serial.write_byte_nb(c); // Display: Write char
-                usb_serial.flush_tx().ok();
-                buffer.push(c); // Push char into buffer
-            }
-        }
-        trace!("[ store_serial_buffer ] New Buffer: {=[u8]:x}", buffer);
-    }
-    return buffer;
-}
-
-
-//////////////////
-// CRYPTOGRAPHY //
-//////////////////
-// Compute the sha256 of an input
-fn hash256(buffer: &[u8], sha: &mut Sha<'_>) -> [u8; 32] {
-    let mut hasher: esp_hal::sha::ShaDigest<'_, Sha256, &mut Sha<'_>> = sha.start::<Sha256>();
-    let mut hash_buffer: &[u8] = buffer;
-    trace!("[ hash256 ] hash_buffer initialized.");
-    trace!("[ hash256 ] hash_buffer: {=[u8]:x}", hash_buffer);
-    while !hash_buffer.is_empty() {
-        // All the HW Sha functions are infallible so unwrap is fine to use if
-        // you use block!
-        hash_buffer = block!(hasher.update(hash_buffer)).unwrap();
-        trace!("[ hash256 ] hash_buffer: {=[u8]:x}", hash_buffer);
-    }
-    let mut output = [0u8; 32];
-    block!(hasher.finish(output.as_mut_slice())).unwrap();
-    trace!("[ hash256 ] hash: {=[u8]:x}", output);
-    return output;
-}
-
-// Encrypt/Decrypt an input using AES
-fn aes256(buffer: &mut Vec<u8>, mode: Mode, aes: &mut Aes<'_>, sha: &mut Sha<'_>) -> Vec<u8> {
-    let keybuf = hash256(SHARED_SECRET, sha);
-    trace!("[ aes256 ] Secret key hashed.");
-    trace!("[ aes256 ] Key hash: {=[u8]:x}", keybuf);
-    let mut blocks: Vec<[u8; 16]> = Vec::new();
-    trace!("[ aes256 ] Chopping input into chunks of 16 bytes.");
-    let mut i = 0;
-    while i < buffer.len() {
-        trace!("[ aes256 ] Operating on chunk: {:?}", i);
-        let remaining = buffer.len() - i;
-        let current_chunk_size = core::cmp::min(16, remaining); // Handle last chunk
-        let mut chunk = [0u8; 16];
-        let data_slice = &buffer[i..i + current_chunk_size];
-        chunk[..data_slice.len()].copy_from_slice(data_slice);
-        trace!("[ aes256 ] Chunk: {=[u8]:x}", chunk);
-        blocks.push(chunk);
-        i += 16;
-    }
-    trace!("[ aes256 ] Chunk vector: {:x}", blocks);
-    for j in 0..blocks.len() {
-        match mode {
-            Mode::Encryption256 => {
-                trace!("[ aes256 ] Encrypting chunk: {:?}", j);
-                trace!("[ aes256 ] Decrypted chunk: {=[u8]:x}", blocks[j]);
-                aes.process(&mut blocks[j], Mode::Encryption256, keybuf);
-                trace!("[ aes256 ] Encrypted chunk: {=[u8]:x}", blocks[j]);
-            }
-            Mode::Decryption256 => {
-                trace!("[ aes256 ] Decrypting chunk: {:?}", j);
-                trace!("[ aes256 ] Encrypted chunk: {=[u8]:x}", blocks[j]);
-                aes.process(&mut blocks[j], Mode::Decryption256, keybuf);
-                trace!("[ aes256 ] Decrypted chunk: {=[u8]:x}", blocks[j]);
-            }
-            _ => (), // If user asks for other modes, this function is the identity and returns the plaintext.
-        }
-    }
-    let mut flattened = Vec::new();
-    trace!("[ aes256 ] Flattening chunk vector.");
-    for chunk in blocks {
-        flattened.extend_from_slice(&chunk);
-    }
-    trace!("[ aes256 ] Flattened vector: {=[u8]:x}", flattened);
-    return flattened;
-}
-
 
 ///////////////////
 // State Machine //
@@ -264,241 +100,6 @@ fn dbg_state_transition(state1: StateMachine, state2: StateMachine) {
     );
 }
 
-
-//////////////////////
-// CONJUGATE CODING //
-//////////////////////
-// Custom deserializer for Vec<u8> from hex string
-fn deserialize_vec_from_hex_string<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    hex::decode(&s).map_err(Error::custom)
-}
-
-// Structure to store submitted preparation information
-#[derive(Zeroize, ZeroizeOnDrop, Deserialize, Format)]
-pub struct ConjugateCodingPreparePlaintext {
-    security_size: usize,
-    orderings: Vec<u8>,
-    security0: Vec<u8>,
-    security1: Vec<u8>,
-}
-
-impl ConjugateCodingPreparePlaintext {
-    fn deserialize(json_vec: &[u8]) -> Result<Self, serde_json::Error> {
-        #[derive(Deserialize)]
-        struct HexPlainData {
-            security_size: usize,
-            #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-            orderings: Vec<u8>,
-            #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-            security0: Vec<u8>,
-            #[serde(deserialize_with = "deserialize_vec_from_hex_string")]
-            security1: Vec<u8>,
-        }
-
-        let hex_data: HexPlainData = serde_json::from_slice(json_vec)?;
-
-        Ok(ConjugateCodingPreparePlaintext {
-            security_size: hex_data.security_size,
-            orderings: hex_data.orderings,
-            security0: hex_data.security0,
-            security1: hex_data.security1,
-        })
-    }
-}
-
-
-////////////////
-// INTERRUPTS //
-////////////////
-static RECEIVING_PIN: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-static HERALD_PIN: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-static OUTCOME0_PIN: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-static OUTCOME1_PIN: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-
-#[handler]
-#[ram] //Placed in RAM for faster execution
-fn handler() {
-    critical_section::with(|receiving_sec| {
-        let mut receiving_pin = RECEIVING_PIN.borrow_ref_mut(receiving_sec);
-        let receiving_pin = receiving_pin.as_mut().unwrap();
-        if receiving_pin.is_interrupt_set() {
-            debug!("[ handler ] RECEIVING was the source of the interrupt");
-            if receiving_pin.is_high() {
-                start_cycle(receiving_sec);
-            } else {
-                stop_cycle(receiving_sec);
-            }
-            receiving_pin.clear_interrupt();
-        }
-    });
-
-    critical_section::with(|herald_sec| {
-        let mut herald_pin = HERALD_PIN.borrow_ref_mut(herald_sec);
-        let herald_pin = herald_pin.as_mut().unwrap();
-        if herald_pin.is_interrupt_set() {
-            debug!("[ handler ] HERALD was the source of the interrupt");
-            see_herald(herald_sec);
-            herald_pin.clear_interrupt();
-        }
-    });
-
-    critical_section::with(|outcome0_sec| {
-        let mut outcome0_pin = OUTCOME0_PIN.borrow_ref_mut(outcome0_sec);
-        let outcome0_pin = outcome0_pin.as_mut().unwrap();
-        if outcome0_pin.is_interrupt_set() {
-            debug!("[ handler ] OUTCOME0 was the source of the interrupt");
-            see_outcome0(outcome0_sec);
-            outcome0_pin.clear_interrupt();
-        }
-    });
-
-    critical_section::with(|outcome1_sec| {
-        let mut outcome1_pin = OUTCOME1_PIN.borrow_ref_mut(outcome1_sec);
-        let outcome1_pin = outcome1_pin.as_mut().unwrap();
-        if outcome1_pin.is_interrupt_set() {
-            debug!("[ handler ] OUTCOME1 was the source of the interrupt");
-            see_outcome1(outcome1_sec);
-            outcome1_pin.clear_interrupt();
-        }
-    });
-}
-
-/////////////////////////////
-// MEASUREMENT ACQUISITION //
-/////////////////////////////
- 
-// Constants
-#[ram]
-static OUTCOME_DELAY_US: u64 = 500;
-#[ram]
-static OUTCOME_DELAY_STDDEV_US: u64 = 50;
-#[ram]
-static MIN_OUTCOME_DELAY_US: u64 = OUTCOME_DELAY_US-3*OUTCOME_DELAY_STDDEV_US;
-#[ram]
-static MAX_OUTCOME_DELAY_US: u64 = OUTCOME_DELAY_US+3*OUTCOME_DELAY_STDDEV_US;
-
-// Variables
-#[ram]
-static CYCLE: Mutex<Cell<usize>> = Mutex::new(Cell::new(0));
-#[ram]
-static RECEIVING_STATUS: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
-#[ram]
-static HERALD_SEEN: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
-#[ram]
-static HERALD_LOCKED: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
-#[ram]
-static HERALD_TIME: Mutex<Cell<Instant>> = Mutex::new(Cell::new(time::Instant::EPOCH));
-#[ram]
-static OUTCOME0_SEEN: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
-#[ram]
-static OUTCOME1_SEEN: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
-
-// Starts a new bit reception cycle.
-//
-// A cycle is the period during which the TEE expects to receive a single bit of data from the generator,
-// although in reality the process is noisy and the bit may not be received correctly.
-#[ram]
-fn start_cycle(cs: CriticalSection<'_>) {
-    debug!("[ start_cycle ] Starting cycle.");
-    HERALD_SEEN.borrow(cs).set(false);
-    HERALD_LOCKED.borrow(cs).set(false);
-    OUTCOME0_SEEN.borrow(cs).set(false);
-    OUTCOME1_SEEN.borrow(cs).set(false);
-    RECEIVING_STATUS.borrow(cs).set(true);
-    debug!("[ start_cycle ] Cycle started.");
-}
-
-// Stops the current bit reception cycle.
-//
-// A cycle is the period during which the TEE expects to receive a single bit of data from the generator,
-// although in reality the process is noisy and the bit may not be received correctly.
-//
-#[ram]
-fn stop_cycle(cs: CriticalSection<'_>) {
-    debug!("[ stop_cycle ] Stopping cycle.");
-    RECEIVING_STATUS.borrow(cs).set(false);
-    let cycle = CYCLE.borrow(cs);
-    cycle.set(cycle.get() + 1);
-    debug!("[ stop_cycle ] Cycle stopped.");
-}
-
-// Records that a herald photon has been observed in this bit reception cycle.
-//
-// Observation of a herald photon pre-empts the potential observation of a data photon, but it is not
-// necessarily the case that the first herald photon observed is one which will be followed by a data photon.
-// As a consequence, the time of herald photon observation is updated at each observation, until the first
-// data photon is received (at which point the herald photon time is locked).
-#[ram] //Placed in RAM for faster execution
-fn see_herald(cs: CriticalSection<'_>) {
-        if !RECEIVING_STATUS.borrow(cs).get() || HERALD_LOCKED.borrow(cs).get()
-        {
-            debug!( "[ see_herald ] triggered at the wrong time." );
-            return
-        } else {
-            debug!( "[ see_herald ] triggered at the right time." );
-            HERALD_TIME.borrow(cs).set(Instant::now());
-            debug!( "[ see_herald ] herald_time: {}", HERALD_TIME.borrow(cs).get() );
-            HERALD_SEEN.borrow(cs).set(true);
-        }
-}
-
-// Records that a data photon has been measured with outcome 0 in this bit reception cycle.
-// 
-// Measurement of a data photon is only recorded if it happens after observation of a herald photon,
-// within a pre-defined time window based on the time delays expected from the quantum HW setup.
-#[ram] //Placed in RAM for faster execution
-fn see_outcome0(cs: CriticalSection<'_>) {
-    if !RECEIVING_STATUS.borrow(cs).get() || !HERALD_SEEN.borrow(cs).get()
-        {
-            debug!( "[ see_outcome0 ] triggered at the wrong time." );
-            return
-        } else {
-            debug!( "[ see_outcome0 ] triggered at the right time." );
-            let delay: Duration = Instant::now() - HERALD_TIME.borrow(cs).get();
-            if delay.as_micros() >= MIN_OUTCOME_DELAY_US && delay.as_micros() <= MAX_OUTCOME_DELAY_US {
-                debug!( "[ see_outcome0 ] delay: {:?}", delay.as_micros() );
-                HERALD_LOCKED.borrow(cs).set(true);
-                OUTCOME0_SEEN.borrow(cs).set(true);
-            }
-        }
-}
-
-// Records that a data photon has been measured with outcome 0 in this bit reception cycle.
-// 
-// Measurement of a data photon is only recorded if it happens after observation of a herald photon,
-// within a pre-defined time window based on the time delays expected from the quantum HW setup.
-#[ram] //Placed in RAM for faster execution
-fn see_outcome1(cs: CriticalSection<'_>) {
-    //if (!CYCLE.borrow())
-        if !RECEIVING_STATUS.borrow(cs).get() || !HERALD_SEEN.borrow(cs).get() {
-            debug!( "[ see_outcome1 ] triggered at the wrong time." );
-            return
-        } else {
-            debug!( "[ see_outcome1 ] triggered at the right time." );
-            let delay: Duration = Instant::now() - HERALD_TIME.borrow(cs).get();
-            if delay.as_micros() >= MIN_OUTCOME_DELAY_US && delay.as_micros() <= MAX_OUTCOME_DELAY_US {
-                debug!( "[ see_outcome1 ] delay: {:?}", delay.as_micros() );
-                HERALD_LOCKED.borrow(cs).set(true);
-                OUTCOME1_SEEN.borrow(cs).set(true);
-            }
-        }
-}
-
-// Sets the pin selecting the choice of measurement high or low.
-fn set_basis(cs: CriticalSection<'_>, basis_select_pin: &mut Output<'_>, pin: bool) {
-    if !RECEIVING_STATUS.borrow(cs).get() {
-        if pin {
-            basis_select_pin.set_high();
-        } else {
-            basis_select_pin.set_low();
-        }
-    }
-}
-
 #[main] //Placed in RAM for faster execution
 fn main() -> ! {
     info!("Bootstrapping TEE-Rust.");
@@ -507,7 +108,7 @@ fn main() -> ! {
     // HEAP STUFF //
     ////////////////
     // Here we initialize the heap and the peripherals
-    init_heap();
+    heap_stuff::init_heap();
     info!("Heap initialized.");
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
@@ -518,7 +119,7 @@ fn main() -> ! {
     ///////////////
     info!("Initializing pins.");    
     let mut io = Io::new(peripherals.IO_MUX);
-    io.set_interrupt_handler(handler);
+    io.set_interrupt_handler(interrupts::handler);
     
     let mut running_pin = Output::new(peripherals.GPIO20, Level::Low, OutputConfig::default());    
     let mut basis_select_pin = Output::new(peripherals.GPIO19, Level::Low, OutputConfig::default());
@@ -629,7 +230,7 @@ fn main() -> ! {
                 dbg_state_transition(PreparationDialog, PreparationInput);
             }
             PreparationInput => {
-                let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
+                let buffer = serial_comms::store_serial_buffer(&mut buffer, &mut usb_serial);
                 if (buffer.len() > 0) && buffer[buffer.len() - 1] == 04 {
                     println!("");
                     println!("[ PREPARATION ] Information submitted. Decripting...");
@@ -640,7 +241,7 @@ fn main() -> ! {
                         PreparationInput, buffer
                     );
                     let mut decrypted_buffer = 
-                        aes256(&mut decode(&buffer).unwrap(), Mode::Decryption256, &mut aes, &mut sha);
+                        cryptography::aes256(&mut decode(&buffer).unwrap(), Mode::Decryption256, &mut aes, &mut sha, SHARED_SECRET);
                     buffer.zeroize();
                     debug!(
                         "[ {:?} ] Buffer has been zeroized: New buffer: {=[u8]:x}",
@@ -663,7 +264,7 @@ fn main() -> ! {
                         PreparationInput, decrypted_buffer
                     );
                     println!("[ PREPARATION ] Information decrypted. Validating...");
-                    match ConjugateCodingPreparePlaintext::deserialize(&decrypted_buffer) {
+                    match conjugate_coding_helpers::ConjugateCodingPreparePlaintext::deserialize(&decrypted_buffer) {
                         Err(_) => {
                             error!("[ PREPARATION ] Protocol wasn't able to parse the string. Restarting protocol...");
                             decrypted_buffer.zeroize();
@@ -734,7 +335,7 @@ fn main() -> ! {
                 dbg_state_transition(ProgramDialog, ProgramInput);
             }
             ProgramInput => {
-                let buffer = store_serial_buffer(&mut buffer, &mut usb_serial);
+                let buffer = serial_comms::store_serial_buffer(&mut buffer, &mut usb_serial);
                 if (buffer.len() > 0) && buffer[buffer.len() - 1] == 04 {
                     println!("");
                     println!("[ PROGRAM INPUT ] Information submitted.");
@@ -747,7 +348,7 @@ fn main() -> ! {
                     program_input = buffer.to_vec();
                     debug!("[ {:?} ] program_input assigned", ProgramInput);
                     println!("[ PROGRAM INPUT ] Computing program input hash");
-                    program_hash = hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
+                    program_hash = cryptography::hash256(buffer, &mut sha)[0..preparation.total_size].to_vec();
                     //program_hash = hash256(buffer, &mut sha)[0..8].to_vec();
                     buffer.zeroize();
                     debug!(
