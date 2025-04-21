@@ -3,14 +3,18 @@
 
 // AES PASSWORD TO COMMUNICATE WITH THE TEE
 const SHARED_SECRET: &[u8] = "SUp4SeCp@sSw0rd".as_bytes();
+const SECRET_KEY: &[u8] = "00000000000000000000000000000000".as_bytes();
 
 //59512135d326918f7187e6979e6fd9ddb173a4f1e4c5b8db0c8e3486511006cf21ef7a38715b4867fb63bed675cfff8581e8460b6487175ec896d6acf193dae322402137ea3381098c0c5621bdcdbc9aa7aaa22ec69c7e553a3e65443139bf7de47a0b273df1bc745f3665b7c7ac650b
 
 // Here you can feed your program to the TEE!
-fn your_program_here(_program_input: &Vec<u8>) -> Vec<u8> {
-    return vec![0; 0];
+use libsecp256k1::{Message, SecretKey, Signature, sign}; //To produce the signed output in this specific application
+fn your_program_here(program_input: &Vec<u8>, sha: &mut Sha<'_>) -> Vec<u8> {
+    let message =  Message::parse(&cryptography::hash256(program_input, sha));
+    let secret_key = SecretKey::parse_slice(SECRET_KEY).unwrap();
+    let signature = sign(&message, &secret_key).0;
+    return Signature::serialize(&signature).to_vec();
 }
-
 
 //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
@@ -624,7 +628,7 @@ fn main() -> ! {
             RunProgram => {
                 wdt.feed();
                 println! {""};
-                println!("Program result: {:?}", your_program_here(&program_input));
+                println!("Program result: {:?}", your_program_here(&program_input, & mut sha));
                 println! {""};
                 println! {"Bye! Restarting protocol..."}
                 state_machine = PreparationInput;

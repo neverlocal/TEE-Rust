@@ -45,3 +45,6 @@ hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde
 conjugate_coding = { path = "../../../conjugate_coding_library", default-features = false, features = ["defmt"] }
 
 critical-section = "1.0"
+
+# Ethereum signature scheme
+libsecp256k1 = { version = "0.7.2", default-features = false, features = ["hmac", "hmac-drbg", "sha2", "static-context", "typenum"] }

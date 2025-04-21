@@ -346,6 +346,36 @@ impl ConjugateCodingPrepare {
             false
         }
     }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn secret_size(preparation: &ConjugateCodingPrepare) -> usize {
+        return preparation.secret_size;
+    }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn security_size(preparation: &ConjugateCodingPrepare) -> usize {
+        return preparation.security_size;
+    }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn orderings(preparation: &ConjugateCodingPrepare) -> &Vec<u8> {
+        return preparation.orderings.expose_secret();
+    }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn bitmask(preparation: &ConjugateCodingPrepare) -> &Vec<u8> {
+        return preparation.bitmask.expose_secret();
+    }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn security0(preparation: &ConjugateCodingPrepare) -> &Vec<u8> {
+        return preparation.security0.expose_secret();
+    }
+
+    #[cfg(feature = "prepareUnsafe")]
+    pub fn security1(preparation: &ConjugateCodingPrepare) -> &Vec<u8> {
+        return preparation.security1.expose_secret();
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -499,6 +529,17 @@ impl ConjugateCodingMeasure {
 
         return Self::new(preparation, boxed_outcomes, boxed_choices);
     }
+
+    #[cfg(feature = "measureUnsafe")]
+    pub fn outcomes(measurement: &ConjugateCodingMeasure) -> &Vec<u8> {
+        return measurement.outcomes.expose_secret();
+    }
+
+    #[cfg(feature = "measureUnsafe")]
+    pub fn choiches(measurement: ConjugateCodingMeasure) -> &Vec<u8> {
+        return measurement.choices.expose_secret();
+    }
+
 }
 
 pub struct ConjugateCodingResult {
@@ -759,6 +800,16 @@ impl ConjugateCodingResult {
             secret.push(mask);
         }
         return SecretBox::new(Box::new(secret));
+    }
+
+    #[cfg(feature = "resultUnsafe")]
+    pub fn purged(result: &ConjugateCodingResult) -> &Vec<u8> {
+        return result.purged.expose_secret();
+    }
+
+    #[cfg(feature = "resultUnsafe")]
+    pub fn secret(result: &ConjugateCodingResult) -> &Vec<u8> {
+        return result.secret.expose_secret();
     }
 }
 

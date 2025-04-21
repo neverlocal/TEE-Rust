@@ -8,6 +8,9 @@ std = []
 no_std = []
 debug = []
 defmt = []
+prepareUnsafe = []
+measureUnsafe = []
+resultUnsafe = []
 
 [dependencies]
 esp-println = { version = "0.13.0", features = ["esp32c6"] }
