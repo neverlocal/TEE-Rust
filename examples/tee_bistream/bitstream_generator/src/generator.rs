@@ -1,9 +1,9 @@
 use alloc::vec::Vec; // Needed for buffer manipulation
 
 use rand::prelude::*;
-use rand::distr::{Distribution, Exp, Normal, StandardUniform, Uniform};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
+use rand_distr::{Distribution, Exp, Normal, StandardUniform, Uniform};
 
 use conjugate_coding::conjugate_coding::ConjugateCodingPrepare;
 use crate::bit_ops::{self, read_nth_bit};
@@ -158,9 +158,9 @@ pub fn real(
             let security1 = ConjugateCodingPrepare::security1(&preparation)[n];
             for b in 0..8 {
                 for c in 0..2 {
-                    let the_uniforms    = generate_uniform_vec(trng, 4);
-                    let the_normals    = generate_normal_vec(trng, 8, DD_M, DD_DEV);
-                    let the_exps       = generate_exp_vec(trng, 4, LAMBDA);
+                    let the_uniforms  = generate_uniform_vec(trng, 4);
+                    let the_normals   = generate_normal_vec(trng, 8, DD_M, DD_DEV);
+                    let the_exps      = generate_exp_vec(trng, 4, LAMBDA);
                     sending.set_high();
                     delay.delay_micros(IDLE_TIME);
                     // For each bit in orderings send two bits.
@@ -177,35 +177,23 @@ pub fn real(
                             data_bit = read_nth_bit(security0, b);
                         }
                         fire_real(
-                            outcome0,
-                            outcome1,
-                            herald,
+                            outcome0, outcome1, herald, 
                             delay,
                             data_bit,
-                            the_uniforms[c],
-                            the_uniforms[c+2],
-                            the_normals[c],
-                            the_normals[c+2],
-                            the_normals[c+4],
-                            the_normals[c+6],
-                            the_exps[c],
-                            the_exps[c+2]
+                            the_uniforms[c],the_uniforms[c+2],
+                            the_normals[c],the_normals[c+2],
+                            the_normals[c+4],the_normals[c+6],
+                            the_exps[c],the_exps[c+2]
                             );
                     } else { // We asked for the wrong row, so we send noise.
                         fire_real(
-                            outcome0,
-                            outcome1,
-                            herald,
+                            outcome0, outcome1, herald, 
                             delay,
                             read_nth_bit(the_noises[n], b),
-                            the_uniforms[c],
-                            the_uniforms[c+2],
-                            the_normals[c],
-                            the_normals[c+2],
-                            the_normals[c+4],
-                            the_normals[c+6],
-                            the_exps[c],
-                            the_exps[c+2]
+                            the_uniforms[c],the_uniforms[c+2],
+                            the_normals[c],the_normals[c+2],
+                            the_normals[c+4],the_normals[c+6],
+                            the_exps[c],the_exps[c+2]
                             );
                     }
                     delay.delay_micros(IDLE_TIME);
