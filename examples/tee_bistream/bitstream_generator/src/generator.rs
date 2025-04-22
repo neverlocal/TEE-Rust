@@ -1,10 +1,9 @@
 use alloc::vec::Vec; // Needed for buffer manipulation
 
 use rand::prelude::*;
-use rand::distr::StandardUniform;
+use rand::distr::{Distribution, Exp, Normal, StandardUniform, Uniform};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
-use rand_distr::{Distribution, Exp, Normal, Uniform};
 
 use conjugate_coding::conjugate_coding::ConjugateCodingPrepare;
 use crate::bit_ops::{self, read_nth_bit};
@@ -159,8 +158,8 @@ pub fn real(
             let security1 = ConjugateCodingPrepare::security1(&preparation)[n];
             for b in 0..8 {
                 for c in 0..2 {
-                    let the_uniforms    = generate_uniform_vec(trng, 2);
-                    let the_normals    = generate_normal_vec(trng, 4, DD_M, DD_DEV);
+                    let the_uniforms    = generate_uniform_vec(trng, 4);
+                    let the_normals    = generate_normal_vec(trng, 8, DD_M, DD_DEV);
                     let the_exps       = generate_exp_vec(trng, 4, LAMBDA);
                     sending.set_high();
                     delay.delay_micros(IDLE_TIME);
@@ -184,8 +183,11 @@ pub fn real(
                             delay,
                             data_bit,
                             the_uniforms[c],
+                            the_uniforms[c+2],
                             the_normals[c],
                             the_normals[c+2],
+                            the_normals[c+4],
+                            the_normals[c+6],
                             the_exps[c],
                             the_exps[c+2]
                             );
@@ -197,8 +199,11 @@ pub fn real(
                             delay,
                             read_nth_bit(the_noises[n], b),
                             the_uniforms[c],
+                            the_uniforms[c+2],
                             the_normals[c],
                             the_normals[c+2],
+                            the_normals[c+4],
+                            the_normals[c+6],
                             the_exps[c],
                             the_exps[c+2]
                             );
@@ -387,21 +392,24 @@ fn fire_real(
     herald      : &mut Output<'_>,
     delay       : Delay,
     value       : bool,
-    rn_uniform  : f32, // Determines the type of event observed
-    rn_normal1   : u32, // Determines the delay
-    rn_normal2   : u32, // Determines the delay
-    rn_exp1      : u32, // Determines 
-    rn_exp2      : u32, // Determines 
+    rn_uniform1 : f32, // Determines the type of event observed
+    rn_uniform2 : f32, // Determines the type of event observed
+    rn_normal1  : u32, // Determines the delay
+    rn_normal2  : u32, // Determines the delay
+    rn_normal3  : u32, // Determines the delay
+    rn_normal4  : u32, // Determines the delay
+    rn_exp1     : u32, // Determines 
+    rn_exp2     : u32, // Determines 
 ) {
     if rn_exp1 < REAL_DELAY_TIME{ // We got our first emission event
         delay.delay_micros(rn_exp1);
         if random_emission_event(
             outcome0, outcome1, herald, delay,
-            value, rn_uniform, rn_normal1, rn_normal2)
+            value, rn_uniform1, rn_normal1, rn_normal2)
         + rn_exp2 < REAL_DELAY_TIME { // We got time for another one!
                 random_emission_event(
                     outcome0, outcome1, herald, delay,
-                    value, rn_uniform, rn_normal1, rn_normal2
+                    value, rn_uniform2, rn_normal3, rn_normal4
                 );
             }
     }
