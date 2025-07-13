@@ -3,16 +3,71 @@
 
 // AES PASSWORD TO COMMUNICATE WITH THE TEE
 const SHARED_SECRET: &[u8] = "SUp4SeCp@sSw0rd".as_bytes();
-const SECRET_KEY: &[u8] = "00000000000000000000000000000000".as_bytes();
 
+const SECRET_KEY: [u8;32] = [
+    0xac,
+    0x09,
+    0x74,
+    0xbe,
+    0xc3,
+    0x9a,
+    0x17,
+    0xe3,
+    0x6b,
+    0xa4,
+    0xa6,
+    0xb4,
+    0xd2,
+    0x38,
+    0xff,
+    0x94,
+    0x4b,
+    0xac,
+    0xb4,
+    0x78,
+    0xcb,
+    0xed,
+    0x5e,
+    0xfc,
+    0xae,
+    0x78,
+    0x4d,
+    0x7b,
+    0xf4,
+    0xf2,
+    0xff,
+    0x80,
+];
 //59512135d326918f7187e6979e6fd9ddb173a4f1e4c5b8db0c8e3486511006cf21ef7a38715b4867fb63bed675cfff8581e8460b6487175ec896d6acf193dae322402137ea3381098c0c5621bdcdbc9aa7aaa22ec69c7e553a3e65443139bf7de47a0b273df1bc745f3665b7c7ac650b
 
 // Here you can feed your program to the TEE!
 use libsecp256k1::{Message, SecretKey, Signature, sign}; //To produce the signed output in this specific application
-fn your_program_here(program_input: &Vec<u8>, sha: &mut Sha<'_>) -> Vec<u8> {
-    let message =  Message::parse(&cryptography::hash256(program_input, sha));
-    let secret_key = SecretKey::parse_slice(SECRET_KEY).unwrap();
-    let signature = sign(&message, &secret_key).0;
+fn your_program_here(program_input: &Vec<u8>,  sha: &mut Sha<'_>) -> Vec<u8> {
+    debug!(
+        "[ your_program_here ] program input: {=[u8]:x}",
+         program_input
+    );
+    use alloc::string::String;
+    let message: [u8;32] =  
+        hex::decode(
+        String::from_utf8(program_input.to_vec())
+            .unwrap()
+            .trim_start_matches("0x")
+        )
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    println!(
+        "Message: {:?}", message
+    );
+    let message =  Message::parse(&message);
+    let secret_key = SecretKey::parse_slice(&SECRET_KEY).unwrap();
+    let (signature, recovery_id) = sign(&message, &secret_key);
+    debug!("SecretKey: {:?}", SECRET_KEY);
+    println!("R: {:?}", signature.r.b32());
+    println!("S: {:?}", signature.s.b32());
+    println!("V: {:?}", recovery_id.serialize());
     return Signature::serialize(&signature).to_vec();
 }
 

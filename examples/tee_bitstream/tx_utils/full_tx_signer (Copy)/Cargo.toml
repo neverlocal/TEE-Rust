@@ -1,0 +1,12 @@
+[package]
+name = "tx_signer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ethers = { version = "2.0.1"}
+tokio = { version = "1", features = ["full"] }
+eyre = "0.6"
+hex = "0.4.3"
+
+libsecp256k1 = { version = "0.7.2", default-features = false, features = ["hmac", "hmac-drbg", "sha2", "static-context", "typenum"] }
